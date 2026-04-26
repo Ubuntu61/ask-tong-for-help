@@ -74,7 +74,7 @@ export function BinsPage() {
 
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await supabase.from("bins").update({ status: status as Bin["status"], last_moved_at: new Date().toISOString() }).eq("id", id);
+      const { error } = await supabase.from("bins").update({ status: status as any, last_moved_at: new Date().toISOString() }).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => { toast.success("状态已更新"); qc.invalidateQueries({ queryKey: ["bins-list"] }); },
@@ -230,7 +230,7 @@ function AddBinDialog({ onClose }: { onClose: () => void }) {
   const [size, setSize] = useState<string>("20");
   const add = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("bins").insert({ bin_number: binNumber.trim(), size: size as Bin["size"] });
+      const { error } = await supabase.from("bins").insert({ bin_number: binNumber.trim(), size: size as any } as any);
       if (error) throw error;
     },
     onSuccess: () => { toast.success("已添加"); qc.invalidateQueries({ queryKey: ["bins-list"] }); onClose(); },

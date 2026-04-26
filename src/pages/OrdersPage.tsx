@@ -55,8 +55,8 @@ export function OrdersPage() {
         .lte("service_date", to)
         .order("service_date", { ascending: true })
         .order("created_at", { ascending: false });
-      if (statusFilter !== "all") q = q.eq("status", statusFilter as Order["status"]);
-      if (typeFilter !== "all") q = q.eq("type", typeFilter as Order["type"]);
+      if (statusFilter !== "all") q = q.eq("status", statusFilter as any);
+      if (typeFilter !== "all") q = q.eq("type", typeFilter as any);
       const { data, error } = await q;
       if (error) throw error;
       return (data ?? []) as Order[];
