@@ -9,51 +9,235 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
+import { Route as StaffRouteImport } from './routes/_staff'
+import { Route as DriverIndexRouteImport } from './routes/driver.index'
+import { Route as StaffIndexRouteImport } from './routes/_staff.index'
+import { Route as DriverLoginRouteImport } from './routes/driver.login'
+import { Route as StaffOrdersRouteImport } from './routes/_staff.orders'
+import { Route as StaffFleetRouteImport } from './routes/_staff.fleet'
+import { Route as StaffDispatchRouteImport } from './routes/_staff.dispatch'
+import { Route as StaffBinsRouteImport } from './routes/_staff.bins'
+import { Route as DriverStepStepIdRouteImport } from './routes/driver.step.$stepId'
 
-const IndexRoute = IndexRouteImport.update({
+const StaffRoute = StaffRouteImport.update({
+  id: '/_staff',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DriverIndexRoute = DriverIndexRouteImport.update({
+  id: '/driver/',
+  path: '/driver/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StaffIndexRoute = StaffIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => StaffRoute,
+} as any)
+const DriverLoginRoute = DriverLoginRouteImport.update({
+  id: '/driver/login',
+  path: '/driver/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StaffOrdersRoute = StaffOrdersRouteImport.update({
+  id: '/orders',
+  path: '/orders',
+  getParentRoute: () => StaffRoute,
+} as any)
+const StaffFleetRoute = StaffFleetRouteImport.update({
+  id: '/fleet',
+  path: '/fleet',
+  getParentRoute: () => StaffRoute,
+} as any)
+const StaffDispatchRoute = StaffDispatchRouteImport.update({
+  id: '/dispatch',
+  path: '/dispatch',
+  getParentRoute: () => StaffRoute,
+} as any)
+const StaffBinsRoute = StaffBinsRouteImport.update({
+  id: '/bins',
+  path: '/bins',
+  getParentRoute: () => StaffRoute,
+} as any)
+const DriverStepStepIdRoute = DriverStepStepIdRouteImport.update({
+  id: '/driver/step/$stepId',
+  path: '/driver/step/$stepId',
   getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
+  '/': typeof StaffIndexRoute
+  '/bins': typeof StaffBinsRoute
+  '/dispatch': typeof StaffDispatchRoute
+  '/fleet': typeof StaffFleetRoute
+  '/orders': typeof StaffOrdersRoute
+  '/driver/login': typeof DriverLoginRoute
+  '/driver/': typeof DriverIndexRoute
+  '/driver/step/$stepId': typeof DriverStepStepIdRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
+  '/bins': typeof StaffBinsRoute
+  '/dispatch': typeof StaffDispatchRoute
+  '/fleet': typeof StaffFleetRoute
+  '/orders': typeof StaffOrdersRoute
+  '/driver/login': typeof DriverLoginRoute
+  '/': typeof StaffIndexRoute
+  '/driver': typeof DriverIndexRoute
+  '/driver/step/$stepId': typeof DriverStepStepIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
+  '/_staff': typeof StaffRouteWithChildren
+  '/_staff/bins': typeof StaffBinsRoute
+  '/_staff/dispatch': typeof StaffDispatchRoute
+  '/_staff/fleet': typeof StaffFleetRoute
+  '/_staff/orders': typeof StaffOrdersRoute
+  '/driver/login': typeof DriverLoginRoute
+  '/_staff/': typeof StaffIndexRoute
+  '/driver/': typeof DriverIndexRoute
+  '/driver/step/$stepId': typeof DriverStepStepIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/bins'
+    | '/dispatch'
+    | '/fleet'
+    | '/orders'
+    | '/driver/login'
+    | '/driver/'
+    | '/driver/step/$stepId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/bins'
+    | '/dispatch'
+    | '/fleet'
+    | '/orders'
+    | '/driver/login'
+    | '/'
+    | '/driver'
+    | '/driver/step/$stepId'
+  id:
+    | '__root__'
+    | '/_staff'
+    | '/_staff/bins'
+    | '/_staff/dispatch'
+    | '/_staff/fleet'
+    | '/_staff/orders'
+    | '/driver/login'
+    | '/_staff/'
+    | '/driver/'
+    | '/driver/step/$stepId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
+  StaffRoute: typeof StaffRouteWithChildren
+  DriverLoginRoute: typeof DriverLoginRoute
+  DriverIndexRoute: typeof DriverIndexRoute
+  DriverStepStepIdRoute: typeof DriverStepStepIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
+    '/_staff': {
+      id: '/_staff'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof StaffRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/driver/': {
+      id: '/driver/'
+      path: '/driver'
+      fullPath: '/driver/'
+      preLoaderRoute: typeof DriverIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_staff/': {
+      id: '/_staff/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+      preLoaderRoute: typeof StaffIndexRouteImport
+      parentRoute: typeof StaffRoute
+    }
+    '/driver/login': {
+      id: '/driver/login'
+      path: '/driver/login'
+      fullPath: '/driver/login'
+      preLoaderRoute: typeof DriverLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_staff/orders': {
+      id: '/_staff/orders'
+      path: '/orders'
+      fullPath: '/orders'
+      preLoaderRoute: typeof StaffOrdersRouteImport
+      parentRoute: typeof StaffRoute
+    }
+    '/_staff/fleet': {
+      id: '/_staff/fleet'
+      path: '/fleet'
+      fullPath: '/fleet'
+      preLoaderRoute: typeof StaffFleetRouteImport
+      parentRoute: typeof StaffRoute
+    }
+    '/_staff/dispatch': {
+      id: '/_staff/dispatch'
+      path: '/dispatch'
+      fullPath: '/dispatch'
+      preLoaderRoute: typeof StaffDispatchRouteImport
+      parentRoute: typeof StaffRoute
+    }
+    '/_staff/bins': {
+      id: '/_staff/bins'
+      path: '/bins'
+      fullPath: '/bins'
+      preLoaderRoute: typeof StaffBinsRouteImport
+      parentRoute: typeof StaffRoute
+    }
+    '/driver/step/$stepId': {
+      id: '/driver/step/$stepId'
+      path: '/driver/step/$stepId'
+      fullPath: '/driver/step/$stepId'
+      preLoaderRoute: typeof DriverStepStepIdRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
 }
 
+interface StaffRouteChildren {
+  StaffBinsRoute: typeof StaffBinsRoute
+  StaffDispatchRoute: typeof StaffDispatchRoute
+  StaffFleetRoute: typeof StaffFleetRoute
+  StaffOrdersRoute: typeof StaffOrdersRoute
+  StaffIndexRoute: typeof StaffIndexRoute
+}
+
+const StaffRouteChildren: StaffRouteChildren = {
+  StaffBinsRoute: StaffBinsRoute,
+  StaffDispatchRoute: StaffDispatchRoute,
+  StaffFleetRoute: StaffFleetRoute,
+  StaffOrdersRoute: StaffOrdersRoute,
+  StaffIndexRoute: StaffIndexRoute,
+}
+
+const StaffRouteWithChildren = StaffRoute._addFileChildren(StaffRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
+  StaffRoute: StaffRouteWithChildren,
+  DriverLoginRoute: DriverLoginRoute,
+  DriverIndexRoute: DriverIndexRoute,
+  DriverStepStepIdRoute: DriverStepStepIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}
