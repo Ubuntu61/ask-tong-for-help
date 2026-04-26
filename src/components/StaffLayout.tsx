@@ -2,13 +2,14 @@ import { Link, Outlet, useLocation } from "@tanstack/react-router";
 import { ClipboardList, LayoutGrid, ListChecks, PackageCheck, PlusSquare, Truck } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const NAV = [
+type NavItem = { to: string; label: string; icon: typeof PlusSquare; exact?: boolean };
+const NAV: NavItem[] = [
   { to: "/", label: "下单", icon: PlusSquare, exact: true },
   { to: "/orders", label: "订单", icon: ClipboardList },
   { to: "/dispatch", label: "排班", icon: LayoutGrid },
   { to: "/bins", label: "桶库存", icon: PackageCheck },
   { to: "/fleet", label: "车队", icon: Truck },
-] as const;
+];
 
 export function StaffLayout() {
   const location = useLocation();
