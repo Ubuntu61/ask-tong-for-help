@@ -1,0 +1,73 @@
+import { useState, useEffect } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
+import { Truck } from "lucide-react";
+
+const TEST_EMAIL = "driver@kennedy.test";
+const TEST_PASSWORD = "driver123";
+
+export function DriverLoginPage() {
+  const nav = useNavigate();
+  const [email, setEmail] = useState(TEST_EMAIL);
+  const [password, setPassword] = useState(TEST_PASSWORD);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) nav({ to: "/driver" });
+    });
+  }, [nav]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    // 先尝试登录,失败则注册测试账号(仅首版)
+    let { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error && error.message.toLowerCase().includes("invalid")) {
+      const { error: signUpErr } = await supabase.auth.signUp({
+        email, password,
+        options: { emailRedirectTo: `${window.location.origin}/driver` },
+      });
+      if (signUpErr) { setLoading(false); toast.error(signUpErr.message); return; }
+      const retry = await supabase.auth.signInWithPassword({ email, password });
+      error = retry.error;
+    }
+    setLoading(false);
+    if (error) { toast.error(error.message); return; }
+    nav({ to: "/driver" });
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-sidebar p-4">
+      <div className="w-full max-w-sm bg-card rounded-2xl p-6 shadow-2xl">
+        <div className="flex flex-col items-center mb-6">
+          <div className="h-14 w-14 rounded-full bg-primary text-primary-foreground flex items-center justify-center mb-3">
+            <Truck className="h-7 w-7" />
+          </div>
+          <h1 className="text-xl font-bold">司机登录</h1>
+          <p className="text-xs text-muted-foreground mt-1">Kennedy Depot</p>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label>邮箱</Label>
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-12 mt-1 text-base" required />
+          </div>
+          <div>
+            <Label>密码</Label>
+            <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="h-12 mt-1 text-base" required />
+          </div>
+          <Button type="submit" disabled={loading} className="w-full h-12 text-base">
+            {loading ? "登录中..." : "登录"}
+          </Button>
+          <p className="text-xs text-muted-foreground text-center pt-2">
+            首版共享测试账号已预填<br/>{TEST_EMAIL}
+          </p>
+        </form>
+      </div>
+    </div>
+  );
+}
