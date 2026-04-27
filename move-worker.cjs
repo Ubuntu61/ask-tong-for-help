@@ -37,15 +37,15 @@ function copyWorkerAndDependencies() {
       const src = path.join(workerDir, file);
       if (fs.statSync(src).isDirectory()) continue;
 
-      if (file === workerFileName) {
-        fs.copyFileSync(src, path.join(clientDir, '_worker.js'));
-        console.log(`Successfully copied ${file} to _worker.js`);
-      } else {
-        fs.copyFileSync(src, path.join(clientDir, file));
-        // console.log(`Successfully copied dependency ${file} to client dir`);
-      }
+      // Copy all files verbatim
+      fs.copyFileSync(src, path.join(clientDir, file));
     }
-    console.log(`Successfully copied worker dependencies to client dir`);
+    
+    // Create _worker.js that re-exports the original worker entry
+    const workerJsContent = `import worker from "./${workerFileName}";\nexport * from "./${workerFileName}";\nexport default worker;\n`;
+    fs.writeFileSync(path.join(clientDir, '_worker.js'), workerJsContent);
+    
+    console.log(`Successfully copied worker dependencies and generated _worker.js re-exporting ${workerFileName}`);
   } else {
     console.error('Could not find worker-entry file in dist/server or dist/server/assets');
     process.exit(1);
