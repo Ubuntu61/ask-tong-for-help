@@ -37,29 +37,27 @@ function copyWorkerAndDependencies() {
       const src = path.join(workerDir, file);
       if (fs.statSync(src).isDirectory()) continue;
 
-      if (file === workerFileName) {
-        fs.copyFileSync(src, path.join(clientDir, '_worker.js'));
-      } else {
-        fs.copyFileSync(src, path.join(clientDir, file));
-      }
+      fs.copyFileSync(src, path.join(clientDir, file));
     }
     
-    // Now fix all imports in the copied files
-    const clientFiles = fs.readdirSync(clientDir);
-    for (const file of clientFiles) {
-      if (!file.endsWith('.js')) continue;
-      
-      const filePath = path.join(clientDir, file);
-      let content = fs.readFileSync(filePath, 'utf8');
-      
-      const searchString = `./${workerFileName}`;
-      if (content.includes(searchString)) {
-        content = content.split(searchString).join('./_worker.js');
-        fs.writeFileSync(filePath, content, 'utf8');
-      }
+    // Create _worker.js that wraps the original worker entry safely
+    const workerJsContent = `import * as worker from "./${workerFileName}";
+
+export default {
+  fetch(request, env, ctx) {
+    if (worker.default && worker.default.fetch) {
+      return worker.default.fetch(request, env, ctx);
     }
+    if (worker.fetch) {
+      return worker.fetch(request, env, ctx);
+    }
+    return new Response("Worker handler not found", { status: 500 });
+  }
+};
+`;
+    fs.writeFileSync(path.join(clientDir, '_worker.js'), workerJsContent);
     
-    console.log(`Successfully copied worker dependencies and renamed ${workerFileName} to _worker.js`);
+    console.log(`Successfully copied worker dependencies and generated safe _worker.js wrapping ${workerFileName}`);
   } else {
     console.error('Could not find worker-entry file in dist/server or dist/server/assets');
     process.exit(1);
