@@ -86,7 +86,6 @@ export function DispatchPage() {
   const qc = useQueryClient();
   const audit = useAudit();
   const [date, setDate] = useState(todayISO());
-  const [showMap, setShowMap] = useState(false);
   const [localAssignments, setLocalAssignments] = useState<Assignment[] | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -359,15 +358,6 @@ export function DispatchPage() {
         <div className="flex items-center justify-between mb-4 gap-4">
           <h1 className="text-2xl font-bold">排班看板</h1>
           <div className="flex items-center gap-3">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={() => setShowMap(!showMap)}
-              className={showMap ? "bg-primary/10 text-primary border-primary/20" : ""}
-            >
-              <MapPin className="h-4 w-4 mr-1.5" /> 
-              {showMap ? "隐藏地图" : "地图视角"}
-            </Button>
             <Button variant="outline" size="sm" onClick={() => {
               const d = new Date(date); d.setDate(d.getDate() - 1);
               setDate(d.toISOString().slice(0, 10));
@@ -394,15 +384,6 @@ export function DispatchPage() {
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
         >
-          {showMap && (
-            <div className="h-[40vh] min-h-[300px] shrink-0 border-b p-2 bg-muted/10">
-              <DispatchMapWidget 
-                drivers={drivers} 
-                orders={orders} 
-                assignments={activeAssignments} 
-              />
-            </div>
-          )}
           <div className="flex-1 flex overflow-hidden border-t">
             {/* 左侧:待排班 */}
             <div className="h-full shrink-0 pr-3 border-r overflow-y-auto pt-2">
