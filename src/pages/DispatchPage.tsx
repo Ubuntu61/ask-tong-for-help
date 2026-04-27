@@ -30,10 +30,11 @@ import {
   useSensor, useSensors, DragOverlay, useDroppable, closestCorners,
 } from "@dnd-kit/core";
 import {
-  SortableContext, useSortable, verticalListSortingStrategy, arrayMove,
+  SortableContext, useSortable, verticalListSortingStrategy, rectSortingStrategy, arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useAudit } from "@/hooks/use-audit";
+import { DispatchMapWidget } from "@/components/DispatchMapWidget";
 
 type Order = {
   id: string;
@@ -64,35 +65,11 @@ type Assignment = {
   bins: Bin | null;
 };
 
-const SLOTS = [
-  { key: "AM", label: "🌅 AM" },
-  { key: "PM", label: "🌆 PM" },
-  { key: "7-9", label: "⏰ 7-9" },
-] as const;
-type SlotKey = (typeof SLOTS)[number]["key"];
-
 const BACKLOG_ID = "__backlog__";
-
-function slotOfOrder(o: Order): SlotKey {
-  if (o.time_window === "AM" || o.time_window === "PM" || o.time_window === "7-9") {
-    return o.time_window as SlotKey;
-  }
-  // custom 默认归 PM
-  return "PM";
-}
 
 function timeLabel(o: Order) {
   return o.time_window === "custom" ? (o.time_window_custom || "自定义") : o.time_window;
 }
-
-// Droppable id 编码: `${columnId}::${slot}`,columnId 为 BACKLOG_ID 或 driverId
-type DroppableMeta = { columnId: string; slot: SlotKey };
-const dropId = (m: DroppableMeta) => `${m.columnId}::${m.slot}`;
-const parseDropId = (id: string): DroppableMeta | null => {
-  const [columnId, slot] = id.split("::");
-  if (!columnId || !slot) return null;
-  return { columnId, slot: slot as SlotKey };
-};
 
 // 卡片 id 编码:assignment 用 `a:<id>`,unassigned order 用 `o:<id>`
 const cardId = {
@@ -109,7 +86,8 @@ export function DispatchPage() {
   const qc = useQueryClient();
   const audit = useAudit();
   const [date, setDate] = useState(todayISO());
-  const [assignDialog, setAssignDialog] = useState<{ order: Order; driverId: string } | null>(null);
+  const [showMap, setShowMap] = useState(false);
+  const [localAssignments, setLocalAssignments] = useState<Assignment[] | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
 
   const { data: drivers = [] } = useQuery({
@@ -159,84 +137,75 @@ export function DispatchPage() {
     },
   });
 
-  const assignedOrderIds = useMemo(
-    () => new Set(assignments.map((a) => a.order_id)),
-    [assignments],
+  const currentAssignments = localAssignments ?? assignments;
+
+  // 区分已完成和未完成的订单
+  const completedOrders = useMemo(() => orders.filter(o => o.status === "done"), [orders]);
+  const activeOrders = useMemo(() => orders.filter(o => o.status !== "done"), [orders]);
+
+  // 过滤出未完成的 assignments (用于司机列)
+  const activeAssignments = useMemo(
+    () => currentAssignments.filter(a => a.orders.status !== "done"),
+    [currentAssignments]
   );
+
+  const assignedOrderIds = useMemo(
+    () => new Set(activeAssignments.map((a) => a.order_id)),
+    [activeAssignments],
+  );
+
   const unassigned = useMemo(
-    () => orders.filter((o) => !assignedOrderIds.has(o.id)),
-    [orders, assignedOrderIds],
+    () => activeOrders.filter((o) => !assignedOrderIds.has(o.id)),
+    [activeOrders, assignedOrderIds],
   );
 
   // 司机当前选择的车辆 (本地)
   const [driverVehicle, setDriverVehicle] = useState<Record<string, string>>({});
   const getDriverVehicle = (driverId: string) => {
     if (driverVehicle[driverId]) return driverVehicle[driverId];
-    const fromAssignment = assignments.find((a) => a.driver_id === driverId)?.vehicle_id;
+    const fromAssignment = currentAssignments.find((a) => a.driver_id === driverId)?.vehicle_id;
     return fromAssignment ?? vehicles[0]?.id ?? "";
   };
   const getVehicle = (driverId: string) =>
     vehicles.find((v) => v.id === getDriverVehicle(driverId));
 
   // ============ Mutations ============
-  const removeAssignment = useMutation({
-    mutationFn: async (id: string) => {
-      const asg = assignments.find((a) => a.id === id);
-      const { error } = await supabase.from("dispatch_assignments").delete().eq("id", id);
-      if (error) throw error;
-      return asg;
-    },
-    onSuccess: (asg) => {
-      toast.success("已取消分配");
-      if (asg) {
-        audit({
-          action: "order_unassign",
-          entity_type: "order",
-          entity_id: asg.order_id,
-          entity_label: asg.orders.order_number,
-          details: { driver_id: asg.driver_id, vehicle_id: asg.vehicle_id },
+  const saveAllChanges = useMutation({
+    mutationFn: async () => {
+      if (!localAssignments) return;
+      const inserts = localAssignments.filter(a => a.id.startsWith("temp-"));
+      const updates = localAssignments.filter(a => !a.id.startsWith("temp-"));
+      const deletes = assignments.filter(a => !localAssignments.some(la => la.id === a.id));
+
+      for (const d of deletes) {
+        await supabase.from("dispatch_assignments").delete().eq("id", d.id);
+      }
+      for (const i of inserts) {
+        await supabase.from("dispatch_assignments").insert({
+          order_id: i.order_id,
+          driver_id: i.driver_id,
+          vehicle_id: i.vehicle_id,
+          bin_id: i.bin_id,
+          scheduled_date: i.scheduled_date,
+          sequence: i.sequence,
         });
       }
-      qc.invalidateQueries({ queryKey: ["dispatch-assignments", date] });
-      qc.invalidateQueries({ queryKey: ["dispatch-orders", date] });
-      qc.invalidateQueries({ queryKey: ["bins-depot"] });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const moveAssignment = useMutation({
-    mutationFn: async (input: {
-      id: string;
-      driverId: string;
-      vehicleId: string;
-      sequence: number;
-    }) => {
-      const { error } = await supabase.from("dispatch_assignments")
-        .update({
-          driver_id: input.driverId,
-          vehicle_id: input.vehicleId,
-          sequence: input.sequence,
-        })
-        .eq("id", input.id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["dispatch-assignments", date] });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const reorderInColumn = useMutation({
-    mutationFn: async (rows: { id: string; sequence: number }[]) => {
-      // 批量按 sequence 升序更新
-      for (const r of rows) {
-        const { error } = await supabase.from("dispatch_assignments")
-          .update({ sequence: r.sequence }).eq("id", r.id);
-        if (error) throw error;
+      for (const u of updates) {
+        const old = assignments.find(a => a.id === u.id);
+        if (old && (old.sequence !== u.sequence || old.vehicle_id !== u.vehicle_id || old.driver_id !== u.driver_id)) {
+          await supabase.from("dispatch_assignments").update({
+            driver_id: u.driver_id,
+            sequence: u.sequence,
+            vehicle_id: u.vehicle_id
+          }).eq("id", u.id);
+        }
       }
     },
     onSuccess: () => {
+      toast.success("已保存并同步给相关司机");
+      setLocalAssignments(null);
       qc.invalidateQueries({ queryKey: ["dispatch-assignments", date] });
+      qc.invalidateQueries({ queryKey: ["dispatch-orders", date] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -254,94 +223,125 @@ export function DispatchPage() {
     const card = cardId.parse(active.id as string);
     if (!card) return;
 
-    // over 可能是另一张卡片 id 或 droppable id
-    let targetMeta: DroppableMeta | null = parseDropId(over.id as string);
-    if (!targetMeta) {
-      // 落在另一张卡片上 → 推断它所在的列/段
-      const overCard = cardId.parse(over.id as string);
-      if (!overCard) return;
-      if (overCard.kind === "assignment") {
-        const a = assignments.find((x) => x.id === overCard.id);
-        if (!a) return;
-        targetMeta = { columnId: a.driver_id, slot: slotOfOrder(a.orders) };
+    let targetColumnId: string | null = null;
+    const overParsed = cardId.parse(over.id as string);
+    if (overParsed) {
+      if (overParsed.kind === "assignment") {
+        const a = currentAssignments.find((x) => x.id === overParsed.id);
+        if (a) targetColumnId = a.driver_id;
       } else {
-        const o = orders.find((x) => x.id === overCard.id);
-        if (!o) return;
-        targetMeta = { columnId: BACKLOG_ID, slot: slotOfOrder(o) };
+        targetColumnId = BACKLOG_ID;
       }
+    } else {
+      targetColumnId = over.id as string;
     }
+
+    if (!targetColumnId) return;
+
+    const newAssignments = [...currentAssignments];
 
     // ---- 处理拖入目标 ----
     if (card.kind === "order") {
-      // 从待排班拖到司机列 → 弹分配窗
-      if (targetMeta.columnId === BACKLOG_ID) return;
+      if (targetColumnId === BACKLOG_ID) return;
       const order = orders.find((o) => o.id === card.id);
       if (!order) return;
-      setAssignDialog({ order, driverId: targetMeta.columnId });
+
+      const targetDriver = targetColumnId;
+      const driverAsgs = newAssignments.filter(a => a.driver_id === targetDriver).sort((a, b) => a.sequence - b.sequence);
+
+      let insertIndex = driverAsgs.length;
+      if (overParsed && overParsed.kind === "assignment") {
+        insertIndex = driverAsgs.findIndex(a => a.id === overParsed.id);
+        if (insertIndex < 0) insertIndex = driverAsgs.length;
+      }
+
+      const targetVehicleId = getDriverVehicle(targetDriver);
+      const newAsg: Assignment = {
+        id: `temp-${Date.now()}-${order.id}`,
+        order_id: order.id,
+        driver_id: targetDriver,
+        vehicle_id: targetVehicleId,
+        bin_id: null,
+        scheduled_date: date,
+        sequence: 0,
+        orders: order,
+        vehicles: vehicles.find(v => v.id === targetVehicleId) || { id: "", name: "未选", type: "HINO", max_bin_size: null },
+        bins: null
+      };
+
+      driverAsgs.splice(insertIndex, 0, newAsg);
+      driverAsgs.forEach((a, i) => { a.sequence = i + 1; });
+
+      const finalAssignments = newAssignments.filter(a => a.driver_id !== targetDriver).concat(driverAsgs);
+      setLocalAssignments(finalAssignments);
       return;
     }
 
     // assignment 拖动
-    const a = assignments.find((x) => x.id === card.id);
-    if (!a) return;
+    const aIndex = newAssignments.findIndex(x => x.id === card.id);
+    if (aIndex < 0) return;
+    const a = newAssignments[aIndex];
 
-    // 拖回待排班列 → 视为取消分配
-    if (targetMeta.columnId === BACKLOG_ID) {
-      if (confirm(`将 ${a.orders.order_number} 移回待排班?`)) {
-        removeAssignment.mutate(a.id);
-      }
+    // 拖回待排班列
+    if (targetColumnId === BACKLOG_ID) {
+      newAssignments.splice(aIndex, 1);
+      const driverAsgs = newAssignments.filter(x => x.driver_id === a.driver_id).sort((x, y) => x.sequence - y.sequence);
+      driverAsgs.forEach((x, i) => x.sequence = i + 1);
+      setLocalAssignments(newAssignments);
       return;
     }
 
-    const targetDriver = targetMeta.columnId;
-    const targetVehicleId = getDriverVehicle(targetDriver);
+    const targetDriver = targetColumnId;
+    const sameColumn = a.driver_id === targetDriver;
 
-    // 同列同段:重排序
-    const sameColumn = a.driver_id === targetDriver && slotOfOrder(a.orders) === targetMeta.slot;
     if (sameColumn) {
-      const slotItems = assignments
-        .filter((x) => x.driver_id === targetDriver && slotOfOrder(x.orders) === targetMeta!.slot)
-        .sort((x, y) => x.sequence - y.sequence);
-      const oldIndex = slotItems.findIndex((x) => x.id === a.id);
-      let newIndex = oldIndex;
-      const overParsed = cardId.parse(over.id as string);
-      if (overParsed?.kind === "assignment") {
-        newIndex = slotItems.findIndex((x) => x.id === overParsed.id);
-      }
-      if (newIndex < 0) newIndex = slotItems.length - 1;
-      if (oldIndex === newIndex) return;
-      const reordered = arrayMove(slotItems, oldIndex, newIndex);
-      // 给整列(司机所有段)重新生成全局 sequence
-      const driverAll = assignments
+      const driverAsgs = newAssignments
         .filter((x) => x.driver_id === targetDriver)
         .sort((x, y) => x.sequence - y.sequence);
-      const replaceMap = new Map(reordered.map((x, i) => [x.id, i]));
-      // 在 driverAll 中,把当前段替换为 reordered 顺序
-      const slotIds = new Set(reordered.map((x) => x.id));
-      const result: Assignment[] = [];
-      let cursor = 0;
-      for (const x of driverAll) {
-        if (slotIds.has(x.id)) {
-          result.push(reordered[cursor++]);
-        } else {
-          result.push(x);
-        }
-        void replaceMap;
+
+      const oldIndex = driverAsgs.findIndex((x) => x.id === a.id);
+      let newIndex = oldIndex;
+      if (overParsed?.kind === "assignment") {
+        newIndex = driverAsgs.findIndex((x) => x.id === overParsed.id);
+      } else {
+        newIndex = driverAsgs.length - 1;
       }
-      reorderInColumn.mutate(
-        result.map((x, i) => ({ id: x.id, sequence: i + 1 })),
-      );
+
+      if (newIndex < 0) newIndex = driverAsgs.length - 1;
+      if (oldIndex === newIndex) return;
+
+      const reordered = arrayMove(driverAsgs, oldIndex, newIndex);
+      reordered.forEach((x, i) => { x.sequence = i + 1; });
+
+      const finalAssignments = newAssignments.map(x => {
+        if (x.driver_id === targetDriver) {
+          return reordered.find(r => r.id === x.id)!;
+        }
+        return x;
+      });
+      setLocalAssignments(finalAssignments);
       return;
     }
 
-    // 跨司机/跨段移动
-    const targetCount = assignments.filter((x) => x.driver_id === targetDriver).length;
-    moveAssignment.mutate({
-      id: a.id,
-      driverId: targetDriver,
-      vehicleId: targetVehicleId,
-      sequence: targetCount + 1,
-    });
+    // 跨司机移动
+    newAssignments.splice(aIndex, 1);
+    const oldDriverAsgs = newAssignments.filter(x => x.driver_id === a.driver_id).sort((x, y) => x.sequence - y.sequence);
+    oldDriverAsgs.forEach((x, i) => x.sequence = i + 1);
+
+    a.driver_id = targetDriver;
+    a.vehicle_id = getDriverVehicle(targetDriver);
+
+    const targetDriverAsgs = newAssignments.filter(x => x.driver_id === targetDriver).sort((x, y) => x.sequence - y.sequence);
+    let insertIndex = targetDriverAsgs.length;
+    if (overParsed && overParsed.kind === "assignment") {
+      insertIndex = targetDriverAsgs.findIndex(x => x.id === overParsed.id);
+      if (insertIndex < 0) insertIndex = targetDriverAsgs.length;
+    }
+
+    targetDriverAsgs.splice(insertIndex, 0, a);
+    targetDriverAsgs.forEach((x, i) => x.sequence = i + 1);
+
+    setLocalAssignments(newAssignments);
   };
 
   const activeCard = activeId ? cardId.parse(activeId) : null;
@@ -349,7 +349,7 @@ export function DispatchPage() {
     activeCard?.kind === "order"
       ? orders.find((o) => o.id === activeCard.id)
       : activeCard?.kind === "assignment"
-        ? assignments.find((a) => a.id === activeCard.id)?.orders
+        ? currentAssignments.find((a) => a.id === activeCard.id)?.orders
         : undefined;
 
   // ============ Render ============
@@ -358,7 +358,16 @@ export function DispatchPage() {
       <div className="p-4 h-screen flex flex-col">
         <div className="flex items-center justify-between mb-4 gap-4">
           <h1 className="text-2xl font-bold">排班看板</h1>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setShowMap(!showMap)}
+              className={showMap ? "bg-primary/10 text-primary border-primary/20" : ""}
+            >
+              <MapPin className="h-4 w-4 mr-1.5" /> 
+              {showMap ? "隐藏地图" : "地图视角"}
+            </Button>
             <Button variant="outline" size="sm" onClick={() => {
               const d = new Date(date); d.setDate(d.getDate() - 1);
               setDate(d.toISOString().slice(0, 10));
@@ -385,31 +394,66 @@ export function DispatchPage() {
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
         >
-          <div className="flex-1 overflow-x-auto overflow-y-hidden">
-            <div className="flex gap-3 h-full pb-2">
-              {/* 第一列:待排班 */}
-              <BacklogColumn orders={unassigned} />
+          {showMap && (
+            <div className="h-[40vh] min-h-[300px] shrink-0 border-b p-2 bg-muted/10">
+              <DispatchMapWidget 
+                drivers={drivers} 
+                orders={orders} 
+                assignments={activeAssignments} 
+              />
+            </div>
+          )}
+          <div className="flex-1 flex overflow-hidden border-t">
+            {/* 左侧:待排班 */}
+            <div className="h-full shrink-0 pr-3 border-r overflow-y-auto pt-2">
+              <BacklogColumn orders={unassigned} completedOrders={completedOrders} />
+            </div>
 
-              {/* 司机列 */}
+            {/* 右侧:司机行 */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-muted/10">
               {drivers.map((d) => {
-                const list = assignments.filter((a) => a.driver_id === d.id)
+                const list = activeAssignments.filter((a) => a.driver_id === d.id)
                   .sort((x, y) => x.sequence - y.sequence);
+
+                // 检查该司机是否有未保存的更改
+                const driverServer = assignments.filter(a => a.driver_id === d.id);
+                const hasChanges = localAssignments !== null && (
+                  list.length !== driverServer.length ||
+                  list.some((l) => {
+                    const s = driverServer.find(x => x.id === l.id);
+                    return !s || s.sequence !== l.sequence || s.vehicle_id !== l.vehicle_id || s.driver_id !== l.driver_id;
+                  })
+                );
+
                 return (
                   <DriverColumn
                     key={d.id}
                     driver={d}
                     vehicle={getVehicle(d.id)}
                     vehicles={vehicles}
-                    onChangeVehicle={(v) =>
-                      setDriverVehicle((prev) => ({ ...prev, [d.id]: v }))
-                    }
+                    onChangeVehicle={(v) => {
+                      setDriverVehicle((prev) => ({ ...prev, [d.id]: v }));
+                      if (localAssignments) {
+                        setLocalAssignments(localAssignments.map(a => a.driver_id === d.id ? { ...a, vehicle_id: v } : a));
+                      }
+                    }}
                     assignments={list}
-                    onCancel={(id) => removeAssignment.mutate(id)}
+                    onCancel={(id) => {
+                      const newAssignments = [...currentAssignments];
+                      const idx = newAssignments.findIndex(x => x.id === id);
+                      if (idx >= 0) {
+                        newAssignments.splice(idx, 1);
+                        setLocalAssignments(newAssignments);
+                      }
+                    }}
+                    hasChanges={hasChanges}
+                    onSave={() => saveAllChanges.mutate()}
+                    isSaving={saveAllChanges.isPending}
                   />
                 );
               })}
               {drivers.length === 0 && (
-                <div className="self-center text-muted-foreground p-6">
+                <div className="text-center text-muted-foreground p-12 bg-card rounded-lg border border-dashed">
                   尚无司机,请到车队页添加。
                 </div>
               )}
@@ -425,85 +469,71 @@ export function DispatchPage() {
           </DragOverlay>
         </DndContext>
 
-        {assignDialog && (
-          <AssignDialog
-            order={assignDialog.order}
-            driverId={assignDialog.driverId}
-            drivers={drivers}
-            vehicles={vehicles}
-            bins={bins}
-            date={date}
-            defaultVehicleId={getDriverVehicle(assignDialog.driverId)}
-            existingCountByDriver={(id) =>
-              assignments.filter((a) => a.driver_id === id).length
-            }
-            onClose={() => setAssignDialog(null)}
-            onDone={() => {
-              qc.invalidateQueries({ queryKey: ["dispatch-assignments", date] });
-              qc.invalidateQueries({ queryKey: ["dispatch-orders", date] });
-              qc.invalidateQueries({ queryKey: ["bins-depot"] });
-              qc.invalidateQueries({ queryKey: ["orders"] });
-              setAssignDialog(null);
-            }}
-          />
-        )}
       </div>
     </TooltipProvider>
   );
 }
 
 // ============ Backlog Column ============
-function BacklogColumn({ orders }: { orders: Order[] }) {
-  const grouped = useMemo(() => {
-    const m: Record<SlotKey, Order[]> = { AM: [], PM: [], "7-9": [] };
-    orders.forEach((o) => m[slotOfOrder(o)].push(o));
-    return m;
-  }, [orders]);
+function BacklogColumn({ orders, completedOrders }: { orders: Order[], completedOrders: Order[] }) {
+  const { setNodeRef, isOver } = useDroppable({ id: BACKLOG_ID });
 
   return (
-    <div className="w-[300px] shrink-0 flex flex-col bg-muted/40 rounded-lg border">
-      <div className="px-3 py-2.5 border-b bg-card rounded-t-lg flex items-center justify-between">
+    <div className="w-[260px] flex flex-col h-full bg-muted/30 rounded-lg">
+      <div className="px-3 py-2 border-b bg-card rounded-t-lg flex items-center justify-between">
         <div>
-          <div className="font-semibold text-sm">📥 待排班</div>
-          <div className="text-[11px] text-muted-foreground">未分配订单</div>
+          <div className="font-semibold text-sm tracking-tight">📥 待排班</div>
+          <div className="text-[10px] text-muted-foreground">未分配订单</div>
         </div>
-        <Badge variant="secondary">{orders.length}</Badge>
+        <Badge variant="secondary" className="px-1.5">{orders.length}</Badge>
       </div>
-      <div className="flex-1 overflow-y-auto p-2 space-y-3">
-        {SLOTS.map((s) => (
-          <SlotZone
-            key={s.key}
-            columnId={BACKLOG_ID}
-            slot={s.key}
-            label={s.label}
-            count={grouped[s.key].length}
-            warn={false}
-          >
-            <SortableContext
-              items={grouped[s.key].map((o) => cardId.fromOrder(o.id))}
-              strategy={verticalListSortingStrategy}
-            >
-              {grouped[s.key].map((o) => (
-                <SortableOrderCard key={o.id} id={cardId.fromOrder(o.id)}>
-                  <OrderCardDisplay order={o} binNumber={null} />
-                </SortableOrderCard>
-              ))}
-            </SortableContext>
-          </SlotZone>
-        ))}
+      <div
+        ref={setNodeRef}
+        className={cn(
+          "flex-1 overflow-y-auto p-2 space-y-2 transition-colors",
+          isOver && "bg-primary/5"
+        )}
+      >
+        <SortableContext
+          items={orders.map((o) => cardId.fromOrder(o.id))}
+          strategy={verticalListSortingStrategy}
+        >
+          {orders.map((o) => (
+            <SortableOrderCard key={o.id} id={cardId.fromOrder(o.id)}>
+              <OrderCardDisplay order={o} binNumber={null} />
+            </SortableOrderCard>
+          ))}
+        </SortableContext>
         {orders.length === 0 && (
-          <div className="text-center text-muted-foreground text-xs py-8">
+          <div className="text-center text-muted-foreground text-[11px] py-6">
             全部已排班 🎉
           </div>
         )}
       </div>
+
+      {/* 已完成区域 */}
+      {completedOrders.length > 0 && (
+        <div className="border-t bg-card/50 rounded-b-lg flex flex-col max-h-[150px]">
+          <div className="px-3 py-1.5 border-b flex items-center justify-between bg-status-done/10">
+            <div className="text-[11px] font-bold text-status-done flex items-center gap-1">
+              ✓ 已完成
+            </div>
+            <Badge variant="outline" className="text-[9px] h-4 px-1">{completedOrders.length}</Badge>
+          </div>
+          <div className="overflow-y-auto p-1.5 space-y-1.5">
+            {completedOrders.map((o) => (
+              <OrderCardDisplay key={o.id} order={o} binNumber={null} readonly />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // ============ Driver Column ============
 function DriverColumn({
-  driver, vehicle, vehicles, onChangeVehicle, assignments, onCancel,
+  driver, vehicle, vehicles, onChangeVehicle, assignments, onCancel, hasChanges, onSave, isSaving
 }: {
   driver: Profile;
   vehicle: Vehicle | undefined;
@@ -511,124 +541,76 @@ function DriverColumn({
   onChangeVehicle: (id: string) => void;
   assignments: Assignment[];
   onCancel: (id: string) => void;
+  hasChanges?: boolean;
+  onSave?: () => void;
+  isSaving?: boolean;
 }) {
-  const grouped = useMemo(() => {
-    const m: Record<SlotKey, Assignment[]> = { AM: [], PM: [], "7-9": [] };
-    assignments.forEach((a) => m[slotOfOrder(a.orders)].push(a));
-    return m;
-  }, [assignments]);
+  const { setNodeRef, isOver } = useDroppable({ id: driver.id });
 
   return (
-    <div className="w-[300px] shrink-0 flex flex-col bg-muted/40 rounded-lg border">
-      <div className="px-3 py-2.5 border-b bg-card rounded-t-lg">
-        <div className="flex items-center justify-between">
-          <div className="font-semibold text-sm truncate">👤 {driver.name}</div>
-          <Badge variant="secondary">{assignments.length}</Badge>
+    <div className="bg-card border rounded-lg shadow-sm flex flex-col overflow-hidden">
+      <div className="px-4 py-2.5 border-b bg-muted/20 flex items-center justify-between">
+        <div className="font-semibold text-base tracking-tight flex items-center gap-2">
+          <span>👤</span> {driver.name}
+          <Badge variant="secondary" className="px-2 text-[11px] font-normal">{assignments.length} 单</Badge>
         </div>
-        <Select value={vehicle?.id ?? ""} onValueChange={onChangeVehicle}>
-          <SelectTrigger className="h-7 mt-1.5 text-xs">
-            <SelectValue placeholder="选车辆" />
-          </SelectTrigger>
-          <SelectContent>
-            {vehicles.map((v) => (
-              <SelectItem key={v.id} value={v.id}>
-                {v.name} · {v.type}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-2 space-y-3">
-        {SLOTS.map((s) => {
-          const items = grouped[s.key];
-          return (
-            <SlotZone
-              key={s.key}
-              columnId={driver.id}
-              slot={s.key}
-              label={s.label}
-              count={items.length}
-              warn={items.length > 5}
-            >
-              <SortableContext
-                items={items.map((a) => cardId.fromAssignment(a.id))}
-                strategy={verticalListSortingStrategy}
-              >
-                {items.map((a) => {
-                  const conflict = vehicle
-                    ? !vehicleCanCarry(vehicle.type, a.orders.bin_size)
-                    : false;
-                  return (
-                    <SortableOrderCard key={a.id} id={cardId.fromAssignment(a.id)}>
-                      <OrderCardDisplay
-                        order={a.orders}
-                        binNumber={a.bins?.bin_number ?? null}
-                        conflict={conflict}
-                        conflictLabel={
-                          conflict && vehicle
-                            ? `${vehicle.type} 不支持 ${a.orders.bin_size}yd 桶`
-                            : undefined
-                        }
-                        onCancel={() => {
-                          if (confirm(`取消分配 ${a.orders.order_number}?`)) onCancel(a.id);
-                        }}
-                      />
-                    </SortableOrderCard>
-                  );
-                })}
-              </SortableContext>
-            </SlotZone>
-          );
-        })}
-      </div>
-
-      <div className="border-t bg-card rounded-b-lg p-2 space-y-1">
-        <div className="text-[11px] text-muted-foreground text-center">
-          今日合计 <b className="text-foreground">{assignments.length}</b> 单
+        <div className="flex items-center gap-3">
+          <Select value={vehicle?.id ?? ""} onValueChange={onChangeVehicle}>
+            <SelectTrigger className="h-7 w-[160px] text-xs bg-background">
+              <SelectValue placeholder="选择车辆" />
+            </SelectTrigger>
+            <SelectContent>
+              {vehicles.map((v) => (
+                <SelectItem key={v.id} value={v.id} className="text-xs">
+                  {v.name} · {v.type}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {hasChanges && (
+            <Button size="sm" onClick={onSave} disabled={isSaving} className="h-7 text-xs px-3 shadow-sm font-bold">
+              同步修改
+            </Button>
+          )}
         </div>
-        <Button asChild variant="outline" size="sm" className="w-full h-7 text-xs">
-          <Link to="/">
-            <Plus className="h-3 w-3" /> 直接添加
-          </Link>
-        </Button>
       </div>
-    </div>
-  );
-}
 
-// ============ Slot Zone (droppable per slot) ============
-function SlotZone({
-  columnId, slot, label, count, warn, children,
-}: {
-  columnId: string;
-  slot: SlotKey;
-  label: string;
-  count: number;
-  warn: boolean;
-  children: React.ReactNode;
-}) {
-  const { setNodeRef, isOver } = useDroppable({ id: dropId({ columnId, slot }) });
-  return (
-    <div>
-      <div className={cn(
-        "flex items-center justify-between px-1 py-1 text-[11px] uppercase tracking-wide",
-        warn ? "text-status-progress font-bold" : "text-muted-foreground",
-      )}>
-        <span>{label}</span>
-        <span>{count} 单 {warn && "⚠"}</span>
-      </div>
       <div
         ref={setNodeRef}
         className={cn(
-          "min-h-[60px] rounded-md p-1.5 space-y-1.5 transition-colors border border-dashed",
-          isOver ? "bg-primary/10 border-primary" : "border-transparent",
+          "p-3 flex gap-2 overflow-x-auto min-h-[100px] transition-colors",
+          isOver ? "bg-primary/5" : "bg-muted/5"
         )}
       >
-        {children}
-        {count === 0 && (
-          <div className="text-center text-[11px] text-muted-foreground/60 py-2">
-            拖到此处
+        <SortableContext
+          items={assignments.map((a) => cardId.fromAssignment(a.id))}
+          strategy={rectSortingStrategy}
+        >
+          {assignments.map((a) => {
+            const conflict = vehicle
+              ? !vehicleCanCarry(vehicle.type, a.orders.bin_size)
+              : false;
+            return (
+              <SortableOrderCard key={a.id} id={cardId.fromAssignment(a.id)}>
+                <OrderCardDisplay
+                  order={a.orders}
+                  binNumber={a.bins?.bin_number ?? null}
+                  conflict={conflict}
+                  conflictLabel={
+                    conflict && vehicle
+                      ? `${vehicle.type} 不支持 ${a.orders.bin_size}yd 桶`
+                      : undefined
+                  }
+                  onCancel={() => onCancel(a.id)}
+                  isRowLayout
+                />
+              </SortableOrderCard>
+            );
+          })}
+        </SortableContext>
+        {assignments.length === 0 && (
+          <div className="w-full self-center text-center text-xs text-muted-foreground/50 py-4">
+            拖拽任务至此处
           </div>
         )}
       </div>
@@ -654,7 +636,7 @@ function SortableOrderCard({ id, children }: { id: string; children: React.React
 
 // ============ Order Card Display ============
 function OrderCardDisplay({
-  order, binNumber, conflict, conflictLabel, onCancel, ghost,
+  order, binNumber, conflict, conflictLabel, onCancel, ghost, readonly, isRowLayout
 }: {
   order: Order;
   binNumber: string | null;
@@ -662,101 +644,69 @@ function OrderCardDisplay({
   conflictLabel?: string;
   onCancel?: () => void;
   ghost?: boolean;
+  readonly?: boolean;
+  isRowLayout?: boolean;
 }) {
   const tm = typeMeta(order.type);
+  const isDone = order.status === "done";
+
   return (
     <div
       className={cn(
-        "relative rounded-md bg-card border shadow-sm pl-2.5 pr-2 py-2 cursor-grab active:cursor-grabbing select-none",
-        conflict && "ring-2 ring-destructive border-destructive",
-        ghost && "shadow-xl",
+        "relative rounded border bg-card shadow-sm p-1.5 transition-colors shrink-0",
+        !readonly ? "cursor-grab active:cursor-grabbing hover:border-primary/40" : "",
+        isRowLayout ? "w-[180px]" : "w-full",
+        conflict && "ring-1 ring-destructive border-destructive",
+        ghost && "shadow-xl opacity-90 scale-105",
+        isDone && "bg-muted/50 border-transparent opacity-80"
       )}
     >
-      {/* 左侧色条 */}
-      <div
-        className={cn("absolute left-0 top-1.5 bottom-1.5 w-1 rounded-full", `bg-type-${order.type}`)}
-      />
+      <div className={cn("absolute left-0 top-1 bottom-1 w-[3px] rounded-r-full", `bg-type-${order.type}`)} />
+      <div className="pl-1.5 flex flex-col gap-1 w-full min-w-0">
 
-      <div className="flex items-start gap-1.5 pl-1.5">
-        <div className="flex-1 min-w-0">
-          {/* 行 1:类型 + 桶尺寸 + 时间 */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs font-semibold">{tm.emoji} {tm.label}</span>
-            {order.bin_size && (
-              <Badge variant="outline" className="h-4 px-1 text-[10px]">
-                {order.bin_size}yd
-              </Badge>
-            )}
-            <span className="text-[10px] text-muted-foreground ml-auto">
-              {timeLabel(order)}
-            </span>
-          </div>
-
-          {/* 行 2:地址 */}
-          <div className="flex items-center gap-1 mt-1 text-[11px] text-foreground/90 truncate">
-            <MapPin className="h-2.5 w-2.5 shrink-0 text-muted-foreground" />
-            <span className="truncate">{order.address}</span>
-          </div>
-
-          {/* 行 3:客户 + 桶号 */}
-          <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-muted-foreground">
-            <span className="truncate">{order.customer_name}</span>
-            {binNumber && (
-              <Badge className="h-4 px-1 text-[10px] bg-primary/10 text-primary border border-primary/30 ml-auto">
-                {binNumber}
-              </Badge>
-            )}
-          </div>
-
-          {/* 客户备注 */}
-          {order.customer_notes && (
-            <div className="mt-1 inline-block bg-status-progress/15 text-status-progress text-[10px] px-1.5 py-0.5 rounded max-w-full truncate">
-              📝 {order.customer_notes}
-            </div>
-          )}
-
-          {/* 状态 */}
-          {order.status !== "pending" && (
-            <div className="mt-1 text-[10px] text-muted-foreground">
-              {ORDER_STATUS_LABEL[order.status]}
-            </div>
-          )}
-
-          {/* 冲突警告 */}
-          {conflict && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="flex items-center gap-1 mt-1 text-[10px] font-bold text-destructive">
-                  <AlertTriangle className="h-3 w-3" /> 车型不匹配
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>{conflictLabel ?? "车型与桶规格不匹配"}</TooltipContent>
-            </Tooltip>
+        {/* 行 1: 时间 */}
+        <div className="flex items-center justify-between text-[11px]">
+          <span className="font-bold text-primary">{timeLabel(order)}</span>
+          {onCancel && !readonly && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="text-muted-foreground/50 hover:text-foreground">
+                  <MoreVertical className="h-3 w-3" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="text-xs min-w-[120px]">
+                <DropdownMenuItem onClick={() => alert(`订单号:${order.order_number}\n客户:${order.customer_name}\n地址:${order.address}`)}>
+                  查看详情
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onCancel} className="text-destructive">
+                  取消分配
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </div>
 
-        {/* 三点菜单 */}
-        {onCancel && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                className="p-0.5 rounded hover:bg-muted shrink-0"
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <MoreVertical className="h-3.5 w-3.5 text-muted-foreground" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="text-xs">
-              <DropdownMenuItem onClick={() => alert(`订单号:${order.order_number}\n${order.address}`)}>
-                查看详情
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={onCancel} className="text-destructive">
-                取消分配
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+        {/* 行 2: 做什么 */}
+        <div className="flex items-center gap-1 text-[11px] font-semibold truncate">
+          <span>{tm.emoji} {tm.label} {order.bin_size ? `${order.bin_size}y` : ""}</span>
+          {binNumber && <Badge className="ml-auto h-3.5 px-1 text-[9px] bg-primary/10 text-primary border-primary/20">#{binNumber}</Badge>}
+        </div>
+
+        {/* 行 3: 地址 */}
+        <div className="text-[10px] text-muted-foreground truncate" title={order.address}>
+          {order.address}
+        </div>
+
+        {/* 行 4: 备注/冲突 */}
+        {conflict ? (
+          <div className="text-[9px] text-destructive font-bold truncate flex items-center gap-1">
+            <AlertTriangle className="h-2.5 w-2.5" /> {conflictLabel}
+          </div>
+        ) : order.customer_notes && !isDone ? (
+          <div className="text-[9px] text-status-progress truncate opacity-80">
+            📝 {order.customer_notes}
+          </div>
+        ) : <div className="h-3.5"></div>}
       </div>
     </div>
   );

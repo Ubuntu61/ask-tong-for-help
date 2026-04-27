@@ -35,7 +35,7 @@ const NAV: NavItem[] = [
   { to: "/bins", label: "桶库存", icon: PackageCheck },
   { to: "/fleet", label: "车队", icon: Truck },
   { to: "/reports", label: "报表", icon: BarChart3 },
-  { to: "/audit", label: "审计日志", icon: ScrollText, roles: ["admin"] },
+  // { to: "/audit", label: "审计日志", icon: ScrollText, roles: ["admin"] },
   { to: "/users", label: "用户管理", icon: Users, roles: ["admin"] },
 ];
 
