@@ -33,6 +33,15 @@ try {
     console.log(`Merged ${assets.length} server chunks into dist/client/assets/`);
   }
 
+  // 3. Generate _routes.json to bypass worker for static assets
+  const routes = {
+    version: 1,
+    include: ["/*"],
+    exclude: ["/assets/*", "/driver-manifest.json"]
+  };
+  fs.writeFileSync(path.join(clientDir, '_routes.json'), JSON.stringify(routes, null, 2));
+  console.log("Successfully generated dist/client/_routes.json");
+
 } catch (err) {
   console.error("Error moving worker files:", err);
   process.exit(1);
