@@ -1,10 +1,10 @@
-import { createAPIFileRoute } from '@tanstack/react-start/api'
+import { createFileRoute } from '@tanstack/react-router'
 
-export const Route = createAPIFileRoute('/api/samsara')({
-  GET: async ({ request }) => {
+export const Route = createFileRoute('/api/samsara')({
+  loader: async () => {
     const SAMSARA_TOKEN = (process.env.VITE_SAMSARA_TOKEN || import.meta.env.VITE_SAMSARA_TOKEN || 'samsara_api_xuwBoWcChtpqYPlGqEhhpmXncEhIke') as string;
     
-    console.log('🔄 TanStack Start API: 开始获取 Samsara 数据');
+    console.log('🔄 TanStack Start API (Loader): 开始获取 Samsara 数据');
     
     try {
       const response = await fetch('https://api.samsara.com/fleet/vehicles/locations', {
