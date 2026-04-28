@@ -37,10 +37,10 @@ try {
   const routes = {
     version: 1,
     include: ["/*"],
-    exclude: ["/assets/*", "/driver-manifest.json", "/api/*"]
+    exclude: ["/assets/*", "/driver-manifest.json"]
   };
   fs.writeFileSync(path.join(clientDir, '_routes.json'), JSON.stringify(routes, null, 2));
-  console.log("Successfully generated dist/client/_routes.json (excluding /api/* for Functions)");
+  console.log("Successfully generated dist/client/_routes.json");
 
 } catch (err) {
   console.error("Error moving worker files:", err);
