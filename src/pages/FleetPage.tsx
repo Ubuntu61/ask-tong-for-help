@@ -164,10 +164,9 @@ function AddDriverDialog({ onClose }: { onClose: () => void }) {
           email: email.trim(),
           password: password,
           phone: phone || undefined,
-          role: "driver"
+          role: "driver",
+          accessToken: token // 将 token 放在这里传
         }
-      }).options({
-        headers: { authorization: `Bearer ${token}` }
       });
     },
     onSuccess: () => { 

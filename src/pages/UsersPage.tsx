@@ -110,9 +110,7 @@ export function UsersPage() {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token;
       if (!token) throw new Error("未登录，请重新登录后操作");
-      return await createStaffOrDriverUser({ data: input }).options({
-        headers: { authorization: `Bearer ${token}` }
-      });
+      return await createStaffOrDriverUser({ data: { ...input, accessToken: token } });
     },
     onSuccess: (res, vars) => {
       toast.success(`用户 ${vars.name} 已创建`);
@@ -135,9 +133,7 @@ export function UsersPage() {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token;
       if (!token) throw new Error("未登录");
-      return await setUserRole({ data: input }).options({
-        headers: { authorization: `Bearer ${token}` }
-      });
+      return await setUserRole({ data: { ...input, accessToken: token } });
     },
     onSuccess: (_r, vars) => {
       audit({
@@ -156,9 +152,7 @@ export function UsersPage() {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token;
       if (!token) throw new Error("未登录");
-      return await resetUserPassword({ data: input }).options({
-        headers: { authorization: `Bearer ${token}` }
-      });
+      return await resetUserPassword({ data: { ...input, accessToken: token } });
     },
     onSuccess: () => {
       toast.success("密码已重置");
@@ -173,9 +167,7 @@ export function UsersPage() {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token;
       if (!token) throw new Error("未登录");
-      return await toggleProfileActive({ data: input }).options({
-        headers: { authorization: `Bearer ${token}` }
-      });
+      return await toggleProfileActive({ data: { ...input, accessToken: token } });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["users-profiles"] }),
     onError: (e: Error) => toast.error(e.message),
@@ -457,9 +449,8 @@ function BindAuthDialog({
           email: email.trim(),
           password,
           role,
+          accessToken: token,
         },
-      }).options({
-        headers: { authorization: `Bearer ${token}` },
       });
     },
     onSuccess: () => {
