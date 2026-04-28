@@ -15,6 +15,7 @@ import { fetchSamsaraVehicles } from "@/lib/samsara-api";
 
 type Driver = { id: string; name: string; phone: string | null; email: string | null; is_active: boolean };
 type Vehicle = { id: string; name: string; type: "HINO" | "MACK"; plate: string; samsara_id: string | null; max_bin_size: string | null; is_active: boolean };
+type DriverVehicleAssignment = { id: string; driver_id: string; vehicle_id: string; assigned_at: string; notes: string | null };
 
 export function FleetPage() {
   const qc = useQueryClient();
@@ -23,6 +24,7 @@ export function FleetPage() {
   const [editingDriver, setEditingDriver] = useState<Driver | null>(null);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [vehicleTypeFilter, setVehicleTypeFilter] = useState<string>("ALL");
+  const [assigningDriver, setAssigningDriver] = useState<Driver | null>(null);
 
   const { data: drivers = [] } = useQuery({
     queryKey: ["drivers-all"],
@@ -41,6 +43,15 @@ export function FleetPage() {
     },
   });
 
+  const { data: assignments = [] } = useQuery({
+    queryKey: ["driver-vehicle-assignments"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("driver_vehicle_assignments").select("*");
+      if (error) throw error;
+      return data as DriverVehicleAssignment[];
+    },
+  });
+
   // 提取车辆类型前缀（例如 "BIN#1" -> "BIN", "FLAT#2" -> "FLAT"）
   const extractVehiclePrefix = (name: string): string => {
     const match = name.match(/^([A-Z]+)#/);
@@ -54,6 +65,12 @@ export function FleetPage() {
   const filteredVehicles = vehicleTypeFilter === "ALL" 
     ? vehicles 
     : vehicles.filter(v => extractVehiclePrefix(v.name) === vehicleTypeFilter);
+
+  // 获取司机已分配的车辆
+  const getDriverVehicles = (driverId: string) => {
+    const driverAssignments = assignments.filter(a => a.driver_id === driverId);
+    return vehicles.filter(v => driverAssignments.some(a => a.vehicle_id === v.id));
+  };
 
   const toggleDriver = useMutation({
     mutationFn: async (d: Driver) => {
@@ -163,21 +180,40 @@ export function FleetPage() {
           </div>
           <div className="space-y-2">
             {drivers.map((d) => (
-              <div key={d.id} className={cn("bg-card border rounded-lg p-3 flex items-center gap-3", !d.is_active && "opacity-50")}>
-                <div className="h-10 w-10 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center">
-                  {d.name.charAt(0)}
+              <div key={d.id} className={cn("bg-card border rounded-lg p-3", !d.is_active && "opacity-50")}>
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="h-10 w-10 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center">
+                    {d.name.charAt(0)}
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-medium">{d.name}</div>
+                    <div className="text-xs text-muted-foreground">{d.phone || "—"} · {d.email || "未关联账号"}</div>
+                  </div>
+                  <Badge variant={d.is_active ? "default" : "secondary"}>{d.is_active ? "在岗" : "停用"}</Badge>
+                  <div className="flex gap-1">
+                    <Button size="icon" variant="ghost" onClick={() => setEditingDriver(d)}><Pencil className="h-4 w-4" /></Button>
+                    <Button size="icon" variant="ghost" onClick={() => toggleDriver.mutate(d)}><Power className="h-4 w-4" /></Button>
+                    <Button size="icon" variant="ghost" className="text-destructive" onClick={() => {
+                      if (confirm(`确定删除司机 ${d.name} 吗？`)) deleteDriver.mutate(d.id);
+                    }}><Trash2 className="h-4 w-4" /></Button>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <div className="font-medium">{d.name}</div>
-                  <div className="text-xs text-muted-foreground">{d.phone || "—"} · {d.email || "未关联账号"}</div>
-                </div>
-                <Badge variant={d.is_active ? "default" : "secondary"}>{d.is_active ? "在岗" : "停用"}</Badge>
-                <div className="flex gap-1">
-                  <Button size="icon" variant="ghost" onClick={() => setEditingDriver(d)}><Pencil className="h-4 w-4" /></Button>
-                  <Button size="icon" variant="ghost" onClick={() => toggleDriver.mutate(d)}><Power className="h-4 w-4" /></Button>
-                  <Button size="icon" variant="ghost" className="text-destructive" onClick={() => {
-                    if (confirm(`确定删除司机 ${d.name} 吗？`)) deleteDriver.mutate(d.id);
-                  }}><Trash2 className="h-4 w-4" /></Button>
+                {/* 显示已分配的车辆 */}
+                <div className="ml-13 space-y-1">
+                  {getDriverVehicles(d.id).length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {getDriverVehicles(d.id).map(v => (
+                        <Badge key={v.id} variant="outline" className="text-xs">
+                          {v.name}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-muted-foreground">未分配车辆</div>
+                  )}
+                  <Button size="sm" variant="outline" className="mt-1" onClick={() => setAssigningDriver(d)}>
+                    <Plus className="h-3 w-3 mr-1" /> 分配车辆
+                  </Button>
                 </div>
               </div>
             ))}
@@ -242,6 +278,14 @@ export function FleetPage() {
       {addingVehicle && <AddVehicleDialog onClose={() => setAddingVehicle(false)} />}
       {editingDriver && <EditDriverDialog driver={editingDriver} onClose={() => setEditingDriver(null)} />}
       {editingVehicle && <EditVehicleDialog vehicle={editingVehicle} onClose={() => setEditingVehicle(null)} />}
+      {assigningDriver && (
+        <AssignVehicleDialog 
+          driver={assigningDriver} 
+          vehicles={vehicles}
+          assignments={assignments}
+          onClose={() => setAssigningDriver(null)} 
+        />
+      )}
     </div>
   );
 }
@@ -422,6 +466,196 @@ function EditVehicleDialog({ vehicle, onClose }: { vehicle: Vehicle; onClose: ()
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>取消</Button>
           <Button onClick={() => save.mutate()} disabled={!name.trim() || !plate.trim() || save.isPending}>保存</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AssignVehicleDialog({ 
+  driver, 
+  vehicles, 
+  assignments,
+  onClose 
+}: { 
+  driver: Driver; 
+  vehicles: Vehicle[];
+  assignments: DriverVehicleAssignment[];
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const [selectedType, setSelectedType] = useState<string | null>(null);
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
+
+  // 提取车辆类型前缀
+  const extractVehiclePrefix = (name: string): string => {
+    const match = name.match(/^([A-Z]+)#/);
+    return match ? match[1] : "OTHER";
+  };
+
+  // 获取所有车辆类型
+  const vehicleTypes = Array.from(new Set(vehicles.map(v => extractVehiclePrefix(v.name)))).sort();
+
+  // 根据选中的类型过滤车辆
+  const filteredVehicles = selectedType 
+    ? vehicles.filter(v => extractVehiclePrefix(v.name) === selectedType)
+    : [];
+
+  // 获取司机已分配的车辆ID
+  const assignedVehicleIds = assignments
+    .filter(a => a.driver_id === driver.id)
+    .map(a => a.vehicle_id);
+
+  // 分配车辆
+  const assignVehicle = useMutation({
+    mutationFn: async () => {
+      if (!selectedVehicleId) throw new Error("请选择车辆");
+      
+      // 检查是否已分配
+      if (assignedVehicleIds.includes(selectedVehicleId)) {
+        throw new Error("该车辆已分配给此司机");
+      }
+
+      const { error } = await supabase.from("driver_vehicle_assignments").insert({
+        driver_id: driver.id,
+        vehicle_id: selectedVehicleId,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("已分配车辆");
+      qc.invalidateQueries({ queryKey: ["driver-vehicle-assignments"] });
+      onClose();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  // 取消分配车辆
+  const unassignVehicle = useMutation({
+    mutationFn: async (vehicleId: string) => {
+      const assignment = assignments.find(
+        a => a.driver_id === driver.id && a.vehicle_id === vehicleId
+      );
+      if (!assignment) throw new Error("未找到分配记录");
+
+      const { error } = await supabase
+        .from("driver_vehicle_assignments")
+        .delete()
+        .eq("id", assignment.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("已取消分配");
+      qc.invalidateQueries({ queryKey: ["driver-vehicle-assignments"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>为 {driver.name} 分配车辆</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* 已分配的车辆 */}
+          <div>
+            <Label className="mb-2 block">已分配的车辆</Label>
+            {assignedVehicleIds.length > 0 ? (
+              <div className="space-y-2">
+                {vehicles
+                  .filter(v => assignedVehicleIds.includes(v.id))
+                  .map(v => (
+                    <div key={v.id} className="flex items-center justify-between bg-muted p-2 rounded">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline">{extractVehiclePrefix(v.name)}</Badge>
+                        <span className="font-medium">{v.name}</span>
+                        <span className="text-xs text-muted-foreground">{v.plate}</span>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive"
+                        onClick={() => {
+                          if (confirm(`确定取消分配 ${v.name} 吗？`)) {
+                            unassignVehicle.mutate(v.id);
+                          }
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground bg-muted p-3 rounded">
+                暂无分配的车辆
+              </div>
+            )}
+          </div>
+
+          {/* 选择车辆类型 */}
+          <div>
+            <Label className="mb-2 block">1. 选择车辆类型</Label>
+            <div className="flex flex-wrap gap-2">
+              {vehicleTypes.map(type => (
+                <Button
+                  key={type}
+                  size="sm"
+                  variant={selectedType === type ? "default" : "outline"}
+                  onClick={() => {
+                    setSelectedType(type);
+                    setSelectedVehicleId(null);
+                  }}
+                >
+                  {type} ({vehicles.filter(v => extractVehiclePrefix(v.name) === type).length})
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          {/* 选择具体车辆 */}
+          {selectedType && (
+            <div>
+              <Label className="mb-2 block">2. 选择车辆</Label>
+              <div className="max-h-60 overflow-y-auto space-y-2 border rounded p-2">
+                {filteredVehicles.map(v => {
+                  const isAssigned = assignedVehicleIds.includes(v.id);
+                  return (
+                    <div
+                      key={v.id}
+                      className={cn(
+                        "flex items-center justify-between p-2 rounded cursor-pointer hover:bg-muted",
+                        selectedVehicleId === v.id && "bg-primary/10 border border-primary",
+                        isAssigned && "opacity-50"
+                      )}
+                      onClick={() => !isAssigned && setSelectedVehicleId(v.id)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs">{v.type}</Badge>
+                        <span className="font-medium">{v.name}</span>
+                        <span className="text-xs text-muted-foreground">车牌: {v.plate}</span>
+                      </div>
+                      {isAssigned && (
+                        <Badge variant="secondary" className="text-xs">已分配</Badge>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>关闭</Button>
+          <Button 
+            onClick={() => assignVehicle.mutate()} 
+            disabled={!selectedVehicleId || assignVehicle.isPending}
+          >
+            {assignVehicle.isPending ? "分配中..." : "确认分配"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
