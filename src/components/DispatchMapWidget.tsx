@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { fetchSamsaraVehicles } from "@/lib/samsara-api";
 
 const KENNEDY_DEPOT = { lat: 43.7568, lng: -79.2865, label: "Kennedy Depot" };
 
@@ -59,28 +60,21 @@ export function DispatchMapWidget({ drivers, orders = [], assignments = [] }: { 
     });
   }, [mapLoaded]);
 
-  // 3. 通过后端 API 获取 Samsara 数据
+  // 3. 通过辅助函数获取 Samsara 数据
   useEffect(() => {
     let active = true;
-    const fetchSamsara = async () => {
-      try {
-        const res = await fetch('/api/samsara');
-        if (res.ok) {
-           const result = await res.json();
-           if (active && result.success && result.data) {
-              setSamsaraLocs(result.data);
-              console.log(`✅ 获取到 ${result.data.length} 辆 Samsara 车辆`);
-           }
-        } else {
-          console.warn("Samsara API 返回错误:", res.status);
-        }
-      } catch (e) {
-        console.warn("Samsara fetch error:", e);
+    const fetchData = async () => {
+      const result = await fetchSamsaraVehicles();
+      if (active && result.success && result.data) {
+        setSamsaraLocs(result.data);
+        console.log(`✅ 获取到 ${result.data.length} 辆 Samsara 车辆`);
+      } else if (result.error) {
+        console.warn("Samsara 获取失败:", result.error);
       }
     };
     
-    fetchSamsara();
-    const id = setInterval(fetchSamsara, 10000);
+    fetchData();
+    const id = setInterval(fetchData, 10000);
     return () => { active = false; clearInterval(id); };
   }, []);
 

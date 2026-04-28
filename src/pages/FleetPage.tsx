@@ -11,6 +11,7 @@ import { Plus, Power, Pencil, Trash2, RefreshCw } from "lucide-react";
 import { formatPhone } from "@/lib/business";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { fetchSamsaraVehicles } from "@/lib/samsara-api";
 
 type Driver = { id: string; name: string; phone: string | null; email: string | null; is_active: boolean };
 type Vehicle = { id: string; name: string; type: "HINO" | "MACK"; plate: string; samsara_id: string | null; max_bin_size: string | null; is_active: boolean };
@@ -56,14 +57,8 @@ export function FleetPage() {
 
   const syncSamsara = useMutation({
     mutationFn: async () => {
-      const res = await fetch('/api/samsara');
+      const result = await fetchSamsaraVehicles();
       
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || `API 错误: ${res.status}`);
-      }
-      
-      const result = await res.json();
       if (!result.success) {
         throw new Error(result.error || 'API 返回失败');
       }
