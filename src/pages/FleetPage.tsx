@@ -65,18 +65,23 @@ export function FleetPage() {
       
       const samsaraVehicles = result.data || [];
       
-      // 获取现有车辆
-      const { data: existingVehicles } = await supabase.from("vehicles").select("samsara_id");
+      // 获取现有车辆，用于去重
+      const { data: existingVehicles } = await supabase.from("vehicles").select("samsara_id, plate");
       const existingIds = new Set(existingVehicles?.map(v => v.samsara_id).filter(Boolean) || []);
+      const existingPlates = new Set(existingVehicles?.map(v => v.plate?.toUpperCase()).filter(Boolean) || []);
       
-      // 添加新车辆
-      const newVehicles = samsaraVehicles.filter((v: any) => v.id && v.name && !existingIds.has(v.id));
+      // 添加新车辆：排除 samsara_id 已存在 或 名称(车牌) 已存在的车辆
+      const newVehicles = samsaraVehicles.filter((v: any) => 
+        v.id && v.name && 
+        !existingIds.has(v.id) && 
+        !existingPlates.has(v.name.toUpperCase())
+      );
       
       if (newVehicles.length > 0) {
         const inserts = newVehicles.map((v: any) => ({
           name: v.name,
           type: "MACK" as const,
-          plate: v.name, // 暂时用名称作为车牌
+          plate: v.name.toUpperCase(), // 统一用车牌大写
           samsara_id: v.id,
           max_bin_size: "40",
           is_active: true
