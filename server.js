@@ -13,6 +13,44 @@ const ordersCol = firestore.collection('daily_orders');
 
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Samsara API 代理端点
+app.get('/api/samsara', async (req, res) => {
+    const SAMSARA_TOKEN = process.env.SAMSARA_TOKEN || 'samsara_api_xuwBoWcChtpqYPlGqEhhpmXncEhIke';
+    
+    try {
+        const response = await fetch('https://api.samsara.com/fleet/vehicles/locations', {
+            headers: {
+                'Authorization': `Bearer ${SAMSARA_TOKEN}`,
+                'Accept': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            return res.status(response.status).json({
+                success: false,
+                error: `Samsara API Error: ${response.status} - ${errorText}`,
+                data: []
+            });
+        }
+
+        const data = await response.json();
+        
+        res.json({
+            success: true,
+            data: data.data || [],
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('❌ Samsara API Error:', error.message);
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            data: []
+        });
+    }
+});
+
 async function syncSamsaraToFirestore() {
     const SAMSARA_TOKEN = process.env.SAMSARA_TOKEN;
     if (!SAMSARA_TOKEN) {
