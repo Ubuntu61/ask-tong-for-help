@@ -9,27 +9,30 @@ type AppRole = "admin" | "dispatcher" | "driver";
  */
 async function getAdminUserId(accessToken?: string, contextUserId?: string) {
   let uid = contextUserId;
-  
-  // 如果 context 里没拿到（说明 header 传参失败），尝试用 token 换
+  console.log("[AdminCheck] contextUserId:", uid, "hasToken:", !!accessToken);
+
   if (!uid && accessToken) {
     const { data, error } = await supabaseAdmin.auth.getUser(accessToken);
+    console.log("[AdminCheck] getUser result - userId:", data?.user?.id, "error:", error?.message);
     if (!error && data.user) {
       uid = data.user.id;
     }
   }
 
   if (!uid) throw new Error("未授权：请先登录");
+  console.log("[AdminCheck] Final uid:", uid);
 
-  // 检查是否是 admin 角色
   const { data: roles, error: rErr } = await supabaseAdmin
     .from("user_roles")
     .select("role")
     .eq("user_id", uid);
-  
+
+  console.log("[AdminCheck] roles:", JSON.stringify(roles), "error:", rErr?.message);
+
   if (rErr || !roles?.some(r => r.role === "admin")) {
     throw new Error("权限不足：只有管理员可以执行此操作");
   }
-  
+
   return uid;
 }
 
