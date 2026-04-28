@@ -65,33 +65,33 @@ export function FleetPage() {
       
       const samsaraVehicles = result.data || [];
       
-      // 获取现有车辆，用于去重
-      const { data: existingVehicles } = await supabase.from("vehicles").select("samsara_id, plate");
-      const existingIds = new Set(existingVehicles?.map(v => v.samsara_id).filter(Boolean) || []);
-      const existingPlates = new Set(existingVehicles?.map(v => v.plate?.toUpperCase()).filter(Boolean) || []);
-      
-      // 添加新车辆：排除 samsara_id 已存在 或 名称(车牌) 已存在的车辆
-      const newVehicles = samsaraVehicles.filter((v: any) => 
-        v.id && v.name && 
-        !existingIds.has(v.id) && 
-        !existingPlates.has(v.name.toUpperCase())
-      );
-      
-      if (newVehicles.length > 0) {
-        const inserts = newVehicles.map((v: any) => ({
-          name: v.name,
-          type: "MACK" as const,
-          plate: v.name.toUpperCase(), // 统一用车牌大写
-          samsara_id: v.id,
-          max_bin_size: "40",
-          is_active: true
-        }));
-        
-        const { error } = await supabase.from("vehicles").insert(inserts);
-        if (error) throw error;
+      // 1. 删除现有所有车辆数据
+      // 注意：如果有派遣任务引用了这些车辆，可能会报错（外键约束）
+      const { error: deleteError } = await supabase.from("vehicles").delete().neq("id", "00000000-0000-0000-0000-000000000000" as any);
+      if (deleteError) {
+        console.error("❌ 删除旧车辆失败:", deleteError);
+        throw new Error(`清除旧数据失败: ${deleteError.message}`);
       }
       
-      return { total: samsaraVehicles.length, added: newVehicles.length };
+      console.log("✅ 已清除旧车辆数据");
+
+      // 2. 准备新数据
+      const inserts = samsaraVehicles.map((v: any) => ({
+        name: v.name,
+        type: "MACK" as const,
+        plate: v.name.toUpperCase(),
+        samsara_id: v.id,
+        max_bin_size: "40",
+        is_active: true
+      }));
+      
+      // 3. 插入所有同步到的车辆
+      if (inserts.length > 0) {
+        const { error: insertError } = await supabase.from("vehicles").insert(inserts);
+        if (insertError) throw insertError;
+      }
+      
+      return { total: samsaraVehicles.length, added: inserts.length };
     },
     onSuccess: (result) => {
       toast.success(`同步成功！共 ${result.total} 辆车，新增 ${result.added} 辆`);
