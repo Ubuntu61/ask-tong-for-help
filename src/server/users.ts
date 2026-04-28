@@ -37,6 +37,7 @@ export const createStaffOrDriverUser = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     await ensureAdmin(context.userId);
+    console.log("[CreateUser] Starting creation for:", data.email, "role:", data.role);
 
     // 1. 创建 auth user
     const { data: created, error: authErr } = await supabaseAdmin.auth.admin.createUser({
@@ -44,8 +45,12 @@ export const createStaffOrDriverUser = createServerFn({ method: "POST" })
       password: data.password,
       email_confirm: true,
     });
-    if (authErr) throw new Error(authErr.message);
+    if (authErr) {
+      console.error("[CreateUser] Auth error:", authErr.message);
+      throw new Error(authErr.message);
+    }
     const newUserId = created.user!.id;
+    console.log("[CreateUser] Auth user created ID:", newUserId);
 
     // 2. 创建 profile
     const profileRole: "staff" | "driver" = data.role === "driver" ? "driver" : "staff";
@@ -56,15 +61,24 @@ export const createStaffOrDriverUser = createServerFn({ method: "POST" })
       role: profileRole,
       auth_user_id: newUserId,
     });
-    if (pErr) throw new Error(pErr.message);
+    if (pErr) {
+      console.error("[CreateUser] Profile insert error:", pErr.message);
+      throw new Error(pErr.message);
+    }
+    console.log("[CreateUser] Profile created for:", newUserId);
 
     // 3. 角色
-    await supabaseAdmin
+    const { error: rErr } = await supabaseAdmin
       .from("user_roles")
       .upsert(
         { user_id: newUserId, role: data.role },
         { onConflict: "user_id,role" },
       );
+    if (rErr) {
+      console.error("[CreateUser] Role assign error:", rErr.message);
+    } else {
+      console.log("[CreateUser] Role assigned successfully");
+    }
 
     return { ok: true, user_id: newUserId };
   });
@@ -136,6 +150,7 @@ export const bindAuthToProfile = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     await ensureAdmin(context.userId);
+    console.log("[BindAuth] Binding auth to profile:", data.profile_id, "email:", data.email);
 
     // 检查 profile 是否已经有绑定
     const { data: profile, error: pFetchErr } = await supabaseAdmin
@@ -143,7 +158,10 @@ export const bindAuthToProfile = createServerFn({ method: "POST" })
       .select("id, auth_user_id, email")
       .eq("id", data.profile_id)
       .single();
-    if (pFetchErr) throw new Error(pFetchErr.message);
+    if (pFetchErr) {
+      console.error("[BindAuth] Profile fetch error:", pFetchErr.message);
+      throw new Error(pFetchErr.message);
+    }
     if (profile.auth_user_id) throw new Error("该用户已经绑定了登录账号");
 
     // 1. 创建 auth user
@@ -152,23 +170,36 @@ export const bindAuthToProfile = createServerFn({ method: "POST" })
       password: data.password,
       email_confirm: true,
     });
-    if (authErr) throw new Error(authErr.message);
+    if (authErr) {
+      console.error("[BindAuth] Auth creation error:", authErr.message);
+      throw new Error(authErr.message);
+    }
     const newUserId = created.user!.id;
+    console.log("[BindAuth] Auth user created ID:", newUserId);
 
     // 2. 回写 auth_user_id 到 profiles
     const { error: updateErr } = await supabaseAdmin
       .from("profiles")
       .update({ auth_user_id: newUserId, email: data.email })
       .eq("id", data.profile_id);
-    if (updateErr) throw new Error(updateErr.message);
+    if (updateErr) {
+      console.error("[BindAuth] Profile update error:", updateErr.message);
+      throw new Error(updateErr.message);
+    }
+    console.log("[BindAuth] Profile updated with auth_user_id");
 
     // 3. 分配角色
-    await supabaseAdmin
+    const { error: rErr } = await supabaseAdmin
       .from("user_roles")
       .upsert(
         { user_id: newUserId, role: data.role },
         { onConflict: "user_id,role" },
       );
+    if (rErr) {
+      console.error("[BindAuth] Role assign error:", rErr.message);
+    } else {
+      console.log("[BindAuth] Role assigned successfully");
+    }
 
     return { ok: true, user_id: newUserId };
   });
