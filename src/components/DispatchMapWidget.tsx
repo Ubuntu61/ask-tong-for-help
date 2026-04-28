@@ -264,8 +264,23 @@ export function DispatchMapWidget({ drivers, orders = [], assignments = [] }: { 
 
     // 绘制订单
     const geocoder = new (window as any).google.maps.Geocoder();
+    
+    console.log(`📦 开始绘制订单，共 ${orders.length} 个订单`);
+    
     orders.forEach(order => {
-      if (order.status === 'done' || order.completed) return; // 隐藏已完成
+      console.log(`📦 处理订单: ${order.order_number || order.id}`, {
+        status: order.status,
+        completed: order.completed,
+        address: order.address,
+        type: order.type,
+        bin_size: order.bin_size,
+        time_window: order.time_window
+      });
+      
+      if (order.status === 'done' || order.completed) {
+        console.log(`⏭️ 跳过已完成订单: ${order.order_number}`);
+        return; // 隐藏已完成
+      }
 
       const id = "order_" + order.id;
       
@@ -462,24 +477,93 @@ function createVehicleIconWithLabel(vehicleType: string, driverName: string): st
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
-// 辅助函数: 更新订单的图标颜色
-function updateOrderIcon(marker: any, order: any, assignments: any[], drivers: any[]) {
-  const typeColors: any = {
-    'delivery': '#2196F3',
-    'pickup': '#4CAF50',
-    'swap': '#9C27B0'
+// 辅助函数: 创建带标签的订单图标
+function createOrderIconWithLabel(order: any): string {
+  // 为每种订单类型定义配色方案
+  const colorSchemes: Record<string, { bg: string; text: string; pin: string }> = {
+    'delivery': { bg: '#2196F3', text: '#FFFFFF', pin: '#2196F3' },  // 蓝色
+    'pickup': { bg: '#4CAF50', text: '#FFFFFF', pin: '#4CAF50' },    // 绿色
+    'swap': { bg: '#9C27B0', text: '#FFFFFF', pin: '#9C27B0' }       // 紫色
   };
-  const baseColor = typeColors[order.type] || '#ffca28';
   
-  const assigned = assignments.find(a => a.order_id === order.id);
-  const stroke = assigned ? 'fff' : '333'; 
+  const scheme = colorSchemes[order.type] || { bg: '#FF9800', text: '#FFFFFF', pin: '#FF9800' };
+  
+  // 订单类型中文映射
+  const typeNames: Record<string, string> = {
+    'delivery': '送货',
+    'pickup': '取货',
+    'swap': '换货'
+  };
+  const typeName = typeNames[order.type] || order.type;
+  
+  // 构建标签文本行
+  const lines = [
+    `${typeName} ${order.bin_size || ''}`,
+    order.time_window || '',
+    order.address ? order.address.substring(0, 20) + (order.address.length > 20 ? '...' : '') : ''
+  ].filter(line => line.trim());
+  
+  // 计算卡片尺寸
+  const maxLineWidth = Math.max(...lines.map(line => {
+    return line.split('').reduce((width, char) => {
+      return width + (/[\u4e00-\u9fa5]/.test(char) ? 11 : 7);
+    }, 0);
+  }));
+  
+  const cardWidth = Math.max(maxLineWidth + 12, 80);
+  const cardHeight = 14 + lines.length * 12; // 顶部padding + 每行12px
+  const svgWidth = Math.max(cardWidth + 8, 100);
+  const svgHeight = cardHeight + 30; // 卡片高度 + 图钉高度
+  
+  const cardX = (svgWidth - cardWidth) / 2;
+  const pinX = svgWidth / 2;
+  
+  // 生成文本行
+  let textElements = '';
+  lines.forEach((line, index) => {
+    const y = 10 + index * 12;
+    textElements += `<text x='${svgWidth/2}' y='${y}' text-anchor='middle' font-size='10' font-weight='${index === 0 ? 'bold' : 'normal'}' fill='${scheme.text}' font-family='Arial, sans-serif'>${line}</text>`;
+  });
+  
+  // 创建SVG，包含顶部信息卡片和底部图钉
+  const svg = `
+    <svg xmlns='http://www.w3.org/2000/svg' width='${svgWidth}' height='${svgHeight}' viewBox='0 0 ${svgWidth} ${svgHeight}'>
+      <!-- 顶部信息卡片 -->
+      <rect x='${cardX}' y='0' width='${cardWidth}' height='${cardHeight}' rx='3' fill='${scheme.bg}' stroke='#333' stroke-width='1' opacity='0.95'/>
+      ${textElements}
+      
+      <!-- 连接线 -->
+      <line x1='${pinX}' y1='${cardHeight}' x2='${pinX}' y2='${cardHeight + 5}' stroke='${scheme.pin}' stroke-width='2'/>
+      
+      <!-- 底部图钉 -->
+      <g transform='translate(${pinX - 10}, ${cardHeight + 5})'>
+        <circle cx='10' cy='8' r='8' fill='${scheme.pin}' stroke='#333' stroke-width='1.5'/>
+        <circle cx='10' cy='8' r='3' fill='white' opacity='0.8'/>
+        <line x1='10' y1='16' x2='10' y2='25' stroke='${scheme.pin}' stroke-width='2.5'/>
+      </g>
+    </svg>
+  `.trim();
+  
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
 
-  const fill = encodeURIComponent(baseColor);
-  const svg = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='30' viewBox='0 0 24 30'%3E%3Cellipse cx='12' cy='12' rx='10' ry='10' fill='${fill}' stroke='%23${stroke}' stroke-width='2'/%3E%3Cpath d='M12 22 L12 30' stroke='%23${stroke}' stroke-width='2'/%3E%3C/svg%3E`;
+// 辅助函数: 更新订单的图标
+function updateOrderIcon(marker: any, order: any, assignments: any[], drivers: any[]) {
+  const iconUrl = createOrderIconWithLabel(order);
+  
+  // 计算图标尺寸（根据内容动态调整）
+  const lines = [
+    `${order.type} ${order.bin_size || ''}`,
+    order.time_window || '',
+    order.address ? order.address.substring(0, 20) : ''
+  ].filter(line => line.trim());
+  
+  const height = 14 + lines.length * 12 + 30;
+  const width = 100;
   
   marker.setIcon({
-    url: svg,
-    scaledSize: new (window as any).google.maps.Size(24, 30),
-    anchor: new (window as any).google.maps.Point(12, 30),
+    url: iconUrl,
+    scaledSize: new (window as any).google.maps.Size(width, height),
+    anchor: new (window as any).google.maps.Point(width / 2, height),
   });
 }
