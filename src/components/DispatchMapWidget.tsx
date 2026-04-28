@@ -208,8 +208,8 @@ export function DispatchMapWidget({ drivers, orders = [], assignments = [] }: { 
         map: mapInstance.current,
         icon: {
             url: iconUrl,
-            scaledSize: new (window as any).google.maps.Size(120, 80),
-            anchor: new (window as any).google.maps.Point(60, 70) // 锚点在底部中心
+            scaledSize: new (window as any).google.maps.Size(90, 55),
+            anchor: new (window as any).google.maps.Point(45, 50) // 锚点在底部中心
         },
         zIndex: 1000
       });
@@ -221,8 +221,8 @@ export function DispatchMapWidget({ drivers, orders = [], assignments = [] }: { 
       if (marker.getIcon()?.url !== newIconUrl) {
         marker.setIcon({
           url: newIconUrl,
-          scaledSize: new (window as any).google.maps.Size(120, 80),
-          anchor: new (window as any).google.maps.Point(60, 70)
+          scaledSize: new (window as any).google.maps.Size(90, 55),
+          anchor: new (window as any).google.maps.Point(45, 50)
         });
       }
       
@@ -401,55 +401,56 @@ export function DispatchMapWidget({ drivers, orders = [], assignments = [] }: { 
 
 // 辅助函数: 创建带标签的车辆图标
 function createVehicleIconWithLabel(vehicleType: string, driverName: string): string {
-  const colors: Record<string, string> = {
-    'BIN': '#FFC107',    // 黄色 - 更显眼
-    'FLAT': '#2196F3',   // 蓝色
-    'DUMP': '#9C27B0',   // 紫色
-    'PROALL': '#FF9800', // 橙色
-    'HINO': '#F44336',   // 红色
-    'MACK': '#607D8B',   // 灰色
-    'TRUCK': '#795548'   // 棕色
+  // 为每种车辆类型定义配色方案（背景色 + 文字色）
+  const colorSchemes: Record<string, { bg: string; text: string; truck: string }> = {
+    'BIN': { bg: '#FFC107', text: '#000000', truck: '#FFC107' },      // 黄底黑字
+    'FLAT': { bg: '#2196F3', text: '#FFFFFF', truck: '#2196F3' },     // 蓝底白字
+    'DUMP': { bg: '#9C27B0', text: '#FFFFFF', truck: '#9C27B0' },     // 紫底白字
+    'PROALL': { bg: '#FF9800', text: '#FFFFFF', truck: '#FF9800' },   // 橙底白字
+    'HINO': { bg: '#F44336', text: '#FFFFFF', truck: '#F44336' },     // 红底白字
+    'MACK': { bg: '#607D8B', text: '#FFFFFF', truck: '#607D8B' },     // 灰底白字
+    'TRUCK': { bg: '#795548', text: '#FFFFFF', truck: '#795548' }     // 棕底白字
   };
   
-  const color = colors[vehicleType] || '#795548';
+  const scheme = colorSchemes[vehicleType] || { bg: '#795548', text: '#FFFFFF', truck: '#795548' };
   
   // 创建标签文本
   const labelText = driverName ? `${vehicleType} ${driverName}` : vehicleType;
   
-  // 估算文本宽度（每个字符约8像素，中文字符约12像素）
+  // 估算文本宽度（每个字符约7像素，中文字符约11像素）
   const textWidth = labelText.split('').reduce((width, char) => {
-    return width + (/[\u4e00-\u9fa5]/.test(char) ? 12 : 8);
+    return width + (/[\u4e00-\u9fa5]/.test(char) ? 11 : 7);
   }, 0);
-  const cardWidth = Math.max(textWidth + 16, 60);
-  const svgWidth = Math.max(cardWidth + 10, 120);
+  const cardWidth = Math.max(textWidth + 12, 50);
+  const svgWidth = Math.max(cardWidth + 8, 90);
   
-  // SVG 总高度：标签卡片(24) + 间距(4) + 卡车图标(32) = 60
-  const svgHeight = 80;
+  // SVG 总高度：标签卡片(18) + 间距(2) + 卡车图标(24) = 44，缩小整体尺寸
+  const svgHeight = 55;
   const cardX = (svgWidth - cardWidth) / 2;
-  const truckX = (svgWidth - 32) / 2;
+  const truckX = (svgWidth - 24) / 2;
   
   // 创建SVG，包含顶部标签卡片和底部卡车图标
   const svg = `
     <svg xmlns='http://www.w3.org/2000/svg' width='${svgWidth}' height='${svgHeight}' viewBox='0 0 ${svgWidth} ${svgHeight}'>
-      <!-- 顶部标签卡片 -->
-      <rect x='${cardX}' y='0' width='${cardWidth}' height='24' rx='4' fill='white' stroke='${color}' stroke-width='2' opacity='0.95'/>
-      <text x='${svgWidth/2}' y='16' text-anchor='middle' font-size='12' font-weight='bold' fill='${color}' font-family='Arial, sans-serif'>${labelText}</text>
+      <!-- 顶部标签卡片 - 有色背景 + 对比色文字 -->
+      <rect x='${cardX}' y='0' width='${cardWidth}' height='18' rx='3' fill='${scheme.bg}' stroke='#333' stroke-width='1' opacity='0.95'/>
+      <text x='${svgWidth/2}' y='12' text-anchor='middle' font-size='10' font-weight='bold' fill='${scheme.text}' font-family='Arial, sans-serif'>${labelText}</text>
       
-      <!-- 连接线 -->
-      <line x1='${svgWidth/2}' y1='24' x2='${svgWidth/2}' y2='28' stroke='${color}' stroke-width='2'/>
+      <!-- 连接线 - 缩短距离 -->
+      <line x1='${svgWidth/2}' y1='18' x2='${svgWidth/2}' y2='20' stroke='${scheme.bg}' stroke-width='1.5'/>
       
-      <!-- 底部卡车图标 -->
-      <g transform='translate(${truckX}, 28)'>
+      <!-- 底部卡车图标 - 缩小尺寸 -->
+      <g transform='translate(${truckX}, 20)'>
         <!-- 车身 -->
-        <rect x='4' y='12' width='24' height='12' rx='2' fill='${color}' stroke='#000' stroke-width='1.5'/>
+        <rect x='3' y='9' width='18' height='9' rx='1.5' fill='${scheme.truck}' stroke='#000' stroke-width='1.2'/>
         <!-- 车轮 -->
-        <circle cx='10' cy='24' r='3' fill='#222' stroke='#000' stroke-width='1'/>
-        <circle cx='22' cy='24' r='3' fill='#222' stroke='#000' stroke-width='1'/>
+        <circle cx='7.5' cy='18' r='2.2' fill='#222' stroke='#000' stroke-width='0.8'/>
+        <circle cx='16.5' cy='18' r='2.2' fill='#222' stroke='#000' stroke-width='0.8'/>
         <!-- 驾驶室 -->
-        <rect x='6' y='6' width='20' height='6' rx='1' fill='${color}' stroke='#000' stroke-width='1.5'/>
+        <rect x='4.5' y='4.5' width='15' height='4.5' rx='0.8' fill='${scheme.truck}' stroke='#000' stroke-width='1.2'/>
         <!-- 车窗 -->
-        <rect x='8' y='7.5' width='6' height='3' rx='0.5' fill='#87CEEB' opacity='0.7'/>
-        <rect x='18' y='7.5' width='6' height='3' rx='0.5' fill='#87CEEB' opacity='0.7'/>
+        <rect x='6' y='5.5' width='4.5' height='2.5' rx='0.4' fill='#87CEEB' opacity='0.7'/>
+        <rect x='13.5' y='5.5' width='4.5' height='2.5' rx='0.4' fill='#87CEEB' opacity='0.7'/>
       </g>
     </svg>
   `.trim();
