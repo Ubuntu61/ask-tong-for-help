@@ -496,48 +496,53 @@ function createOrderIconWithLabel(order: any): string {
   };
   const typeName = typeNames[order.type] || order.type;
   
-  // 处理地址：去掉邮编部分（例如 "L0H 1J0"）
-  const cleanAddress = (addr: string): string => {
+  // 提取街道号和城市名
+  const extractAddressShort = (addr: string): string => {
     if (!addr) return '';
-    // 移除加拿大邮编格式 (例如 "L0H 1J0", "M1P 2B3")
-    const withoutPostal = addr.replace(/,?\s*[A-Z]\d[A-Z]\s*\d[A-Z]\d\s*$/i, '').trim();
-    // 如果还是太长，截取前40个字符
-    return withoutPostal.length > 40 ? withoutPostal.substring(0, 40) + '...' : withoutPostal;
+    
+    // 提取街道号（第一个数字部分）
+    const streetNumberMatch = addr.match(/^\d+[A-Za-z]?/);
+    const streetNumber = streetNumberMatch ? streetNumberMatch[0] : '';
+    
+    // 提取城市名（逗号后的第一个词，通常是城市）
+    const parts = addr.split(',').map(p => p.trim());
+    const city = parts.length > 1 ? parts[1].split(' ')[0] : '';
+    
+    return streetNumber && city ? `${streetNumber}, ${city}` : addr.substring(0, 20);
   };
   
-  // 构建标签文本行 - 和车辆卡片一样的字体大小
-  const lines = [
-    `${typeName} ${order.bin_size || ''}`,
-    order.time_window || '',
-    cleanAddress(order.address)
-  ].filter(line => line.trim());
+  // 构建标签文本 - 两行：第一行是类型+尺寸+时段，第二行是简化地址
+  const line1 = `${typeName} ${order.bin_size || ''} ${order.time_window || ''}`.trim();
+  const line2 = extractAddressShort(order.address);
   
-  // 计算卡片尺寸 - 使用和车辆卡片相同的计算方式
+  const lines = [line1, line2].filter(line => line);
+  
+  // 计算卡片尺寸
   const maxLineWidth = Math.max(...lines.map(line => {
     return line.split('').reduce((width, char) => {
-      return width + (/[\u4e00-\u9fa5]/.test(char) ? 11 : 7); // 和车辆卡片相同
+      return width + (/[\u4e00-\u9fa5]/.test(char) ? 11 : 7);
     }, 0);
   }));
   
-  const cardWidth = Math.max(maxLineWidth + 12, 80);
-  const cardHeight = 6 + lines.length * 13; // 顶部padding + 每行13px
-  const svgWidth = Math.max(cardWidth + 8, 100);
-  const svgHeight = cardHeight + 35; // 卡片高度 + 图钉高度
+  const cardWidth = Math.max(maxLineWidth + 16, 80);
+  const cardHeight = 8 + lines.length * 14; // 顶部padding + 每行14px
+  const svgWidth = Math.max(cardWidth + 10, 100);
+  const svgHeight = cardHeight + 35;
   
   const cardX = (svgWidth - cardWidth) / 2;
   const pinX = svgWidth / 2;
   
-  // 生成文本行 - 使用和车辆卡片相同的字体大小 (10px)
+  // 生成文本行 - 使用更大的字体
   let textElements = '';
   lines.forEach((line, index) => {
-    const y = 10 + index * 13; // 和车辆卡片相同的行间距
-    textElements += `<text x='${svgWidth/2}' y='${y}' text-anchor='middle' font-size='10' font-weight='${index === 0 ? 'bold' : 'normal'}' fill='${scheme.text}' font-family='Arial, sans-serif'>${line}</text>`;
+    const y = 12 + index * 14;
+    textElements += `<text x='${svgWidth/2}' y='${y}' text-anchor='middle' font-size='11' font-weight='${index === 0 ? 'bold' : 'normal'}' fill='${scheme.text}' font-family='Arial, sans-serif'>${line}</text>`;
   });
   
-  // 创建SVG，包含顶部信息卡片和底部图钉
+  // 创建SVG
   const svg = `
     <svg xmlns='http://www.w3.org/2000/svg' width='${svgWidth}' height='${svgHeight}' viewBox='0 0 ${svgWidth} ${svgHeight}'>
-      <!-- 顶部信息卡片 - 和车辆卡片相同的样式 -->
+      <!-- 顶部信息卡片 -->
       <rect x='${cardX}' y='0' width='${cardWidth}' height='${cardHeight}' rx='3' fill='${scheme.bg}' stroke='#333' stroke-width='1' opacity='0.95'/>
       ${textElements}
       
@@ -560,22 +565,23 @@ function createOrderIconWithLabel(order: any): string {
 function updateOrderIcon(marker: any, order: any, assignments: any[], drivers: any[]) {
   const iconUrl = createOrderIconWithLabel(order);
   
-  // 处理地址
-  const cleanAddress = (addr: string): string => {
+  // 提取街道号和城市名
+  const extractAddressShort = (addr: string): string => {
     if (!addr) return '';
-    return addr.replace(/,?\s*[A-Z]\d[A-Z]\s*\d[A-Z]\d\s*$/i, '').trim();
+    const streetNumberMatch = addr.match(/^\d+[A-Za-z]?/);
+    const streetNumber = streetNumberMatch ? streetNumberMatch[0] : '';
+    const parts = addr.split(',').map(p => p.trim());
+    const city = parts.length > 1 ? parts[1].split(' ')[0] : '';
+    return streetNumber && city ? `${streetNumber}, ${city}` : addr.substring(0, 20);
   };
   
-  // 计算图标尺寸 - 增大到和车辆图标相似的尺寸
-  const lines = [
-    `${order.type} ${order.bin_size || ''}`,
-    order.time_window || '',
-    cleanAddress(order.address)
-  ].filter(line => line.trim());
+  // 计算图标尺寸 - 增大缩放因子
+  const line1 = `${order.type} ${order.bin_size || ''} ${order.time_window || ''}`.trim();
+  const line2 = extractAddressShort(order.address);
+  const lines = [line1, line2].filter(line => line);
   
-  // 使用更大的渲染尺寸，让字体看起来更大
-  const baseHeight = 6 + lines.length * 13 + 35;
-  const scaleFactor = 1.8; // 放大1.8倍，让字体和车辆标签一样大
+  const baseHeight = 8 + lines.length * 14 + 35;
+  const scaleFactor = 2.5; // 放大2.5倍，让字体更清晰
   const width = 100 * scaleFactor;
   const height = baseHeight * scaleFactor;
   
