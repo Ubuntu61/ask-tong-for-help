@@ -501,55 +501,54 @@ function createOrderIconWithLabel(order: any): string {
     if (!addr) return '';
     // 移除加拿大邮编格式 (例如 "L0H 1J0", "M1P 2B3")
     const withoutPostal = addr.replace(/,?\s*[A-Z]\d[A-Z]\s*\d[A-Z]\d\s*$/i, '').trim();
-    // 如果还是太长，截取前35个字符
-    return withoutPostal.length > 35 ? withoutPostal.substring(0, 35) + '...' : withoutPostal;
+    // 如果还是太长，截取前40个字符
+    return withoutPostal.length > 40 ? withoutPostal.substring(0, 40) + '...' : withoutPostal;
   };
   
-  // 构建标签文本行
+  // 构建标签文本行 - 和车辆卡片一样的字体大小
   const lines = [
     `${typeName} ${order.bin_size || ''}`,
     order.time_window || '',
     cleanAddress(order.address)
   ].filter(line => line.trim());
   
-  // 计算卡片尺寸 - 增大字体后需要更多空间
+  // 计算卡片尺寸 - 使用和车辆卡片相同的计算方式
   const maxLineWidth = Math.max(...lines.map(line => {
     return line.split('').reduce((width, char) => {
-      return width + (/[\u4e00-\u9fa5]/.test(char) ? 13 : 8); // 增大字符宽度
+      return width + (/[\u4e00-\u9fa5]/.test(char) ? 11 : 7); // 和车辆卡片相同
     }, 0);
   }));
   
-  const cardWidth = Math.max(maxLineWidth + 16, 100);
-  const cardHeight = 18 + lines.length * 15; // 增大行高
-  const svgWidth = Math.max(cardWidth + 10, 120);
+  const cardWidth = Math.max(maxLineWidth + 12, 80);
+  const cardHeight = 6 + lines.length * 13; // 顶部padding + 每行13px
+  const svgWidth = Math.max(cardWidth + 8, 100);
   const svgHeight = cardHeight + 35; // 卡片高度 + 图钉高度
   
   const cardX = (svgWidth - cardWidth) / 2;
   const pinX = svgWidth / 2;
   
-  // 生成文本行 - 增大字体
+  // 生成文本行 - 使用和车辆卡片相同的字体大小 (10px)
   let textElements = '';
   lines.forEach((line, index) => {
-    const y = 14 + index * 15; // 增大行间距
-    const fontSize = index === 0 ? '12' : '11'; // 第一行更大
-    textElements += `<text x='${svgWidth/2}' y='${y}' text-anchor='middle' font-size='${fontSize}' font-weight='${index === 0 ? 'bold' : 'normal'}' fill='${scheme.text}' font-family='Arial, sans-serif'>${line}</text>`;
+    const y = 10 + index * 13; // 和车辆卡片相同的行间距
+    textElements += `<text x='${svgWidth/2}' y='${y}' text-anchor='middle' font-size='10' font-weight='${index === 0 ? 'bold' : 'normal'}' fill='${scheme.text}' font-family='Arial, sans-serif'>${line}</text>`;
   });
   
   // 创建SVG，包含顶部信息卡片和底部图钉
   const svg = `
     <svg xmlns='http://www.w3.org/2000/svg' width='${svgWidth}' height='${svgHeight}' viewBox='0 0 ${svgWidth} ${svgHeight}'>
-      <!-- 顶部信息卡片 -->
-      <rect x='${cardX}' y='0' width='${cardWidth}' height='${cardHeight}' rx='4' fill='${scheme.bg}' stroke='#333' stroke-width='1.5' opacity='0.95'/>
+      <!-- 顶部信息卡片 - 和车辆卡片相同的样式 -->
+      <rect x='${cardX}' y='0' width='${cardWidth}' height='${cardHeight}' rx='3' fill='${scheme.bg}' stroke='#333' stroke-width='1' opacity='0.95'/>
       ${textElements}
       
       <!-- 连接线 -->
-      <line x1='${pinX}' y1='${cardHeight}' x2='${pinX}' y2='${cardHeight + 6}' stroke='${scheme.pin}' stroke-width='2.5'/>
+      <line x1='${pinX}' y1='${cardHeight}' x2='${pinX}' y2='${cardHeight + 3}' stroke='${scheme.pin}' stroke-width='1.5'/>
       
       <!-- 底部图钉 -->
-      <g transform='translate(${pinX - 12}, ${cardHeight + 6})'>
-        <circle cx='12' cy='10' r='10' fill='${scheme.pin}' stroke='#333' stroke-width='2'/>
+      <g transform='translate(${pinX - 12}, ${cardHeight + 3})'>
+        <circle cx='12' cy='10' r='10' fill='${scheme.pin}' stroke='#333' stroke-width='1.5'/>
         <circle cx='12' cy='10' r='4' fill='white' opacity='0.9'/>
-        <line x1='12' y1='20' x2='12' y2='29' stroke='${scheme.pin}' stroke-width='3'/>
+        <line x1='12' y1='20' x2='12' y2='32' stroke='${scheme.pin}' stroke-width='2.5'/>
       </g>
     </svg>
   `.trim();
@@ -574,8 +573,8 @@ function updateOrderIcon(marker: any, order: any, assignments: any[], drivers: a
     cleanAddress(order.address)
   ].filter(line => line.trim());
   
-  const height = 18 + lines.length * 15 + 35;
-  const width = 120;
+  const height = 6 + lines.length * 13 + 35;
+  const width = 100;
   
   marker.setIcon({
     url: iconUrl,
