@@ -33,14 +33,14 @@ try {
     console.log(`Merged ${assets.length} server chunks into dist/client/assets/`);
   }
 
-  // 3. Generate _routes.json to bypass worker for static assets
+  // 3. Generate _routes.json to bypass worker for static assets and use Functions for /api/*
   const routes = {
     version: 1,
     include: ["/*"],
-    exclude: ["/assets/*", "/driver-manifest.json"]
+    exclude: ["/assets/*", "/driver-manifest.json", "/api/*"]
   };
   fs.writeFileSync(path.join(clientDir, '_routes.json'), JSON.stringify(routes, null, 2));
-  console.log("Successfully generated dist/client/_routes.json");
+  console.log("Successfully generated dist/client/_routes.json (excluding /api/* for Functions)");
 
 } catch (err) {
   console.error("Error moving worker files:", err);
