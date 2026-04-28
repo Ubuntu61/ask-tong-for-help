@@ -154,6 +154,10 @@ function AddDriverDialog({ onClose }: { onClose: () => void }) {
   const add = useMutation({
     mutationFn: async () => {
       if (!email || !password) throw new Error("邮箱和密码必填，用于开通登录账号");
+      // 获取当前 session token，通过 Authorization header 传给 server function
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) throw new Error("未登录，请重新登录后操作");
       return await createStaffOrDriverUser({
         data: {
           name: name.trim(),
@@ -162,6 +166,8 @@ function AddDriverDialog({ onClose }: { onClose: () => void }) {
           phone: phone || undefined,
           role: "driver"
         }
+      }).options({
+        headers: { authorization: `Bearer ${token}` }
       });
     },
     onSuccess: () => { 

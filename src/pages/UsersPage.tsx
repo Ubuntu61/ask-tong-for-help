@@ -22,12 +22,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, KeyRound, UserCog, Shield, Truck, LayoutGrid } from "lucide-react";
+import { Plus, KeyRound, UserCog, Shield, Truck, LayoutGrid, Link2 } from "lucide-react";
 import {
   createStaffOrDriverUser,
   resetUserPassword,
   setUserRole,
   toggleProfileActive,
+  bindAuthToProfile,
 } from "@/server/users";
 import { useAudit } from "@/hooks/use-audit";
 import { cn } from "@/lib/utils";
@@ -64,6 +65,7 @@ export function UsersPage() {
   const [openNew, setOpenNew] = useState(false);
   const [pwDialog, setPwDialog] = useState<ProfileRow | null>(null);
   const [pwValue, setPwValue] = useState("");
+  const [bindDialog, setBindDialog] = useState<ProfileRow | null>(null);
 
   const { data: profiles = [] } = useQuery({
     queryKey: ["users-profiles"],
@@ -105,7 +107,12 @@ export function UsersPage() {
       phone?: string;
       role: AppRole;
     }) => {
-      return await createStaffOrDriverUser({ data: input });
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) throw new Error("未登录，请重新登录后操作");
+      return await createStaffOrDriverUser({ data: input }).options({
+        headers: { authorization: `Bearer ${token}` }
+      });
     },
     onSuccess: (res, vars) => {
       toast.success(`用户 ${vars.name} 已创建`);
@@ -125,7 +132,12 @@ export function UsersPage() {
 
   const toggleRole = useMutation({
     mutationFn: async (input: { user_id: string; role: AppRole; enabled: boolean }) => {
-      return await setUserRole({ data: input });
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) throw new Error("未登录");
+      return await setUserRole({ data: input }).options({
+        headers: { authorization: `Bearer ${token}` }
+      });
     },
     onSuccess: (_r, vars) => {
       audit({
@@ -141,7 +153,12 @@ export function UsersPage() {
 
   const resetPw = useMutation({
     mutationFn: async (input: { user_id: string; password: string }) => {
-      return await resetUserPassword({ data: input });
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) throw new Error("未登录");
+      return await resetUserPassword({ data: input }).options({
+        headers: { authorization: `Bearer ${token}` }
+      });
     },
     onSuccess: () => {
       toast.success("密码已重置");
@@ -153,7 +170,12 @@ export function UsersPage() {
 
   const toggleActive = useMutation({
     mutationFn: async (input: { profile_id: string; is_active: boolean }) => {
-      return await toggleProfileActive({ data: input });
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) throw new Error("未登录");
+      return await toggleProfileActive({ data: input }).options({
+        headers: { authorization: `Bearer ${token}` }
+      });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["users-profiles"] }),
     onError: (e: Error) => toast.error(e.message),
@@ -256,17 +278,27 @@ export function UsersPage() {
                     </Badge>
                   </td>
                   <td className="px-3 py-2 text-right space-x-1">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={!p.auth_user_id}
-                      onClick={() => {
-                        setPwDialog(p);
-                        setPwValue("");
-                      }}
-                    >
-                      <KeyRound className="h-3.5 w-3.5 mr-1" /> 重置密码
-                    </Button>
+                    {!p.auth_user_id ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-amber-500/50 text-amber-600 hover:bg-amber-50"
+                        onClick={() => setBindDialog(p)}
+                      >
+                        <Link2 className="h-3.5 w-3.5 mr-1" /> 绑定登录
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setPwDialog(p);
+                          setPwValue("");
+                        }}
+                      >
+                        <KeyRound className="h-3.5 w-3.5 mr-1" /> 重置密码
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="ghost"
@@ -315,6 +347,19 @@ export function UsersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 绑定登录账号弹窗（处理历史未绑定数据） */}
+      {bindDialog && (
+        <BindAuthDialog
+          profile={bindDialog}
+          onClose={() => setBindDialog(null)}
+          onSuccess={() => {
+            qc.invalidateQueries({ queryKey: ["users-profiles"] });
+            qc.invalidateQueries({ queryKey: ["user-roles-all"] });
+            setBindDialog(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -385,5 +430,97 @@ function NewUserDialog({
         </Button>
       </DialogFooter>
     </DialogContent>
+  );
+}
+
+function BindAuthDialog({
+  profile,
+  onClose,
+  onSuccess,
+}: {
+  profile: ProfileRow;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [email, setEmail] = useState(profile.email ?? "");
+  const [password, setPassword] = useState("");
+  const [role, setRole] = useState<AppRole>(profile.role === "driver" ? "driver" : "dispatcher");
+
+  const bind = useMutation({
+    mutationFn: async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) throw new Error("未登录，请重新登录后操作");
+      return await bindAuthToProfile({
+        data: {
+          profile_id: profile.id,
+          email: email.trim(),
+          password,
+          role,
+        },
+      }).options({
+        headers: { authorization: `Bearer ${token}` },
+      });
+    },
+    onSuccess: () => {
+      toast.success(`已为 ${profile.name} 开通登录账号`);
+      onSuccess();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>为「{profile.name}」绑定登录账号</DialogTitle>
+        </DialogHeader>
+        <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded p-2 mb-1">
+          此账号是历史数据，尚未开通登录凭证。填写邮箱和密码后将在系统认证里补建账号，之后即可正常登录。
+        </div>
+        <div className="space-y-3">
+          <div>
+            <Label>登录邮箱</Label>
+            <Input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="driver@example.com"
+            />
+          </div>
+          <div>
+            <Label>初始密码 (至少 6 位)</Label>
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="设置登录密码"
+            />
+          </div>
+          <div>
+            <Label>角色</Label>
+            <Select value={role} onValueChange={(v: AppRole) => setRole(v)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="driver">司机</SelectItem>
+                <SelectItem value="dispatcher">调度员</SelectItem>
+                <SelectItem value="admin">管理员</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>取消</Button>
+          <Button
+            disabled={!email.includes("@") || password.length < 6 || bind.isPending}
+            onClick={() => bind.mutate()}
+          >
+            {bind.isPending ? "创建中..." : "确认绑定"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

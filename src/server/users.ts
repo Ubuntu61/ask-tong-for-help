@@ -123,3 +123,52 @@ export const toggleProfileActive = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
+// 为历史数据里没有 auth 登录凭证的老 profile 补建 auth 账号
+export const bindAuthToProfile = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    (input: { profile_id: string; email: string; password: string; role: AppRole }) => {
+      if (!input.email?.includes("@")) throw new Error("邮箱无效");
+      if (!input.password || input.password.length < 6) throw new Error("密码至少 6 位");
+      return input;
+    },
+  )
+  .handler(async ({ data, context }) => {
+    await ensureAdmin(context.userId);
+
+    // 检查 profile 是否已经有绑定
+    const { data: profile, error: pFetchErr } = await supabaseAdmin
+      .from("profiles")
+      .select("id, auth_user_id, email")
+      .eq("id", data.profile_id)
+      .single();
+    if (pFetchErr) throw new Error(pFetchErr.message);
+    if (profile.auth_user_id) throw new Error("该用户已经绑定了登录账号");
+
+    // 1. 创建 auth user
+    const { data: created, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+      email: data.email,
+      password: data.password,
+      email_confirm: true,
+    });
+    if (authErr) throw new Error(authErr.message);
+    const newUserId = created.user!.id;
+
+    // 2. 回写 auth_user_id 到 profiles
+    const { error: updateErr } = await supabaseAdmin
+      .from("profiles")
+      .update({ auth_user_id: newUserId, email: data.email })
+      .eq("id", data.profile_id);
+    if (updateErr) throw new Error(updateErr.message);
+
+    // 3. 分配角色
+    await supabaseAdmin
+      .from("user_roles")
+      .upsert(
+        { user_id: newUserId, role: data.role },
+        { onConflict: "user_id,role" },
+      );
+
+    return { ok: true, user_id: newUserId };
+  });
