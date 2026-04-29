@@ -1,26 +1,38 @@
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ORDER_TYPES, BIN_SIZES, TIME_WINDOWS, todayISO, tomorrowISO, formatPhone } from "@/lib/business";
+import { Slider } from "@/components/ui/slider";
+import { ORDER_TYPES, todayISO, tomorrowISO, formatPhone } from "@/lib/business";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { CheckCircle2 } from "lucide-react";
 import { useAudit } from "@/hooks/use-audit";
 
-type OrderType = (typeof ORDER_TYPES)[number]["value"];
-type BinSize = (typeof BIN_SIZES)[number];
-type TimeWindow = (typeof TIME_WINDOWS)[number]["value"];
+type OrderType = "delivery" | "pickup" | "swap" | "material";
+type BinSize = "14" | "20" | "30" | "40";
+type BinType = "garbage" | "brick" | "soil" | "cement" | "asphalt";
+type TimeSlot = "AM" | "PM" | "anytime";
+
+const BIN_SIZES: BinSize[] = ["14", "20", "30", "40"];
+const BIN_TYPES = [
+  { value: "garbage" as BinType, label: "垃圾桶", emoji: "🗑️" },
+  { value: "brick" as BinType, label: "砖桶", emoji: "🧱" },
+  { value: "soil" as BinType, label: "土桶", emoji: "🏔️" },
+  { value: "cement" as BinType, label: "水泥桶", emoji: "🏗️" },
+  { value: "asphalt" as BinType, label: "沥青桶", emoji: "🛣️" },
+];
 
 const empty = (preserveType?: OrderType) => ({
   type: preserveType ?? ("delivery" as OrderType),
   bin_size: "20" as BinSize,
+  bin_type: "garbage" as BinType,
   service_date: todayISO(),
-  time_window: "AM" as TimeWindow,
-  time_window_custom: "",
+  time_slot: "AM" as TimeSlot,
+  time_range: [7, 13] as [number, number], // AM: 7-13, PM: 12-19
   address: "",
   customer_name: "",
   customer_phone: "",
@@ -35,15 +47,29 @@ export function CreateOrderPage() {
   const qc = useQueryClient();
   const audit = useAudit();
 
+  // 格式化时间范围为字符串
+  const formatTimeRange = (slot: TimeSlot, range: [number, number]): string => {
+    if (slot === "anytime") return "anytime";
+    const [start, end] = range;
+    const formatHour = (h: number) => {
+      if (h === 12) return "12PM";
+      if (h > 12) return `${h - 12}PM`;
+      return `${h}AM`;
+    };
+    return `${formatHour(start)}-${formatHour(end)}`;
+  };
+
   const submit = useMutation({
     mutationFn: async (payload: typeof form) => {
+      const timeWindow = formatTimeRange(payload.time_slot, payload.time_range);
+      
       const insertPayload = {
         order_number: "", // 触发器自动生成
         type: payload.type,
         bin_size: payload.type === "material" ? null : payload.bin_size,
         service_date: payload.service_date,
-        time_window: payload.time_window,
-        time_window_custom: payload.time_window === "custom" ? payload.time_window_custom : null,
+        time_window: timeWindow,
+        time_window_custom: null,
         address: payload.address.trim(),
         customer_name: payload.customer_name.trim(),
         customer_phone: payload.customer_phone.trim(),
@@ -78,177 +104,273 @@ export function CreateOrderPage() {
     if (!form.address.trim()) e2.address = true;
     if (!form.customer_name.trim()) e2.customer_name = true;
     if (!form.customer_phone.trim()) e2.customer_phone = true;
-    if (form.time_window === "custom" && !form.time_window_custom.trim()) e2.time_window_custom = true;
     setErrors(e2);
     if (Object.keys(e2).length) return;
     submit.mutate(form);
   };
 
+  // 切换时间段时更新时间范围
+  const handleTimeSlotChange = (slot: TimeSlot) => {
+    let newRange: [number, number] = [7, 13];
+    if (slot === "PM") newRange = [12, 19];
+    setForm({ ...form, time_slot: slot, time_range: newRange });
+  };
+
+  // 格式化小时显示
+  const formatHour = (h: number) => {
+    if (h === 12) return "12PM";
+    if (h > 12) return `${h - 12}PM`;
+    return `${h}AM`;
+  };
+
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <header className="mb-5">
-        <h1 className="text-2xl font-bold">前台下单</h1>
-        <p className="text-sm text-muted-foreground mt-1">极速填单,所有字段一屏可见。</p>
-      </header>
+    <div className="min-h-screen bg-gradient-to-br from-orange-50 to-yellow-50 p-4">
+      <div className="max-w-5xl mx-auto">
+        {lastCreated && (
+          <div className="mb-4 flex items-center gap-3 rounded-xl border-2 border-green-500 bg-green-50 px-6 py-4 shadow-lg animate-in fade-in slide-in-from-top-2">
+            <CheckCircle2 className="h-6 w-6 text-green-600" />
+            <span className="font-bold text-green-700 text-lg">订单 {lastCreated} 已创建！</span>
+          </div>
+        )}
 
-      {lastCreated && (
-        <div className="mb-4 flex items-center gap-2 rounded-md border border-status-done/30 bg-status-done/10 px-4 py-3 text-status-done">
-          <CheckCircle2 className="h-5 w-5" />
-          <span className="font-medium">订单 {lastCreated} 已创建</span>
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 左栏 */}
-        <div className="space-y-5 bg-card p-5 rounded-lg border">
-          <div>
-            <Label className="text-sm font-medium">操作类型</Label>
-            <div className="grid grid-cols-4 gap-2 mt-2">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* 操作类型 - 大按钮 */}
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <h2 className="text-xl font-bold mb-4 text-gray-800">选择服务类型</h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {ORDER_TYPES.map((t) => (
                 <button
                   key={t.value}
                   type="button"
                   onClick={() => setForm({ ...form, type: t.value })}
                   className={cn(
-                    "py-3 px-2 rounded-md font-semibold border-2 transition-all text-sm",
+                    "py-6 px-4 rounded-xl font-bold border-4 transition-all text-base shadow-md hover:scale-105",
                     form.type === t.value
-                      ? `${t.className} border-transparent shadow-sm`
-                      : "bg-background border-border text-foreground hover:bg-accent"
+                      ? `${t.className} border-transparent shadow-xl scale-105`
+                      : "bg-white border-gray-200 text-gray-700 hover:border-gray-300"
                   )}
                 >
-                  <div className="text-lg leading-none mb-1">{t.emoji}</div>
-                  {t.label}
+                  <div className="text-3xl mb-2">{t.emoji}</div>
+                  <div>{t.label}</div>
                 </button>
               ))}
             </div>
           </div>
 
+          {/* 桶尺寸和类型 */}
           {form.type !== "material" && (
-            <div>
-              <Label className="text-sm font-medium">桶尺寸</Label>
-              <div className="grid grid-cols-3 gap-2 mt-2">
+            <div className="bg-white rounded-2xl shadow-lg p-6">
+              <h2 className="text-xl font-bold mb-4 text-gray-800">选择桶尺寸</h2>
+              <div className="grid grid-cols-4 gap-3 mb-6">
                 {BIN_SIZES.map((s) => (
                   <button
                     key={s}
                     type="button"
                     onClick={() => setForm({ ...form, bin_size: s })}
                     className={cn(
-                      "py-3 rounded-md font-semibold border-2 transition-all",
+                      "py-5 rounded-xl font-bold border-4 transition-all text-lg shadow-md hover:scale-105",
                       form.bin_size === s
-                        ? "bg-primary text-primary-foreground border-transparent"
-                        : "bg-background border-border text-foreground hover:bg-accent"
+                        ? "bg-orange-500 text-white border-transparent shadow-xl scale-105"
+                        : "bg-white border-gray-200 text-gray-700 hover:border-gray-300"
                     )}
                   >
                     {s}yd
                   </button>
                 ))}
               </div>
+
+              <h2 className="text-xl font-bold mb-4 text-gray-800">选择桶类型</h2>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                {BIN_TYPES.map((bt) => {
+                  // 只有14yd时显示特殊桶类型
+                  const isSpecialType = ["brick", "soil", "cement", "asphalt"].includes(bt.value);
+                  if (isSpecialType && form.bin_size !== "14") return null;
+                  
+                  return (
+                    <button
+                      key={bt.value}
+                      type="button"
+                      onClick={() => setForm({ ...form, bin_type: bt.value })}
+                      className={cn(
+                        "py-4 px-3 rounded-xl font-bold border-4 transition-all text-sm shadow-md hover:scale-105",
+                        form.bin_type === bt.value
+                          ? "bg-blue-500 text-white border-transparent shadow-xl scale-105"
+                          : "bg-white border-gray-200 text-gray-700 hover:border-gray-300"
+                      )}
+                    >
+                      <div className="text-2xl mb-1">{bt.emoji}</div>
+                      <div>{bt.label}</div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
 
-          <div>
-            <Label className="text-sm font-medium">服务日期</Label>
-            <div className="flex gap-2 mt-2">
+          {/* 服务日期 */}
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <h2 className="text-xl font-bold mb-4 text-gray-800">选择日期</h2>
+            <div className="flex gap-3">
+              <Button 
+                type="button" 
+                size="lg"
+                variant={form.service_date === todayISO() ? "default" : "outline"}
+                onClick={() => setForm({ ...form, service_date: todayISO() })}
+                className="flex-1 h-14 text-lg font-bold rounded-xl"
+              >
+                今天
+              </Button>
+              <Button 
+                type="button" 
+                size="lg"
+                variant={form.service_date === tomorrowISO() ? "default" : "outline"}
+                onClick={() => setForm({ ...form, service_date: tomorrowISO() })}
+                className="flex-1 h-14 text-lg font-bold rounded-xl"
+              >
+                明天
+              </Button>
               <Input
                 type="date"
                 value={form.service_date}
                 onChange={(e) => setForm({ ...form, service_date: e.target.value })}
-                className="flex-1"
+                className="flex-1 h-14 text-base rounded-xl border-2"
               />
-              <Button type="button" variant="outline" onClick={() => setForm({ ...form, service_date: todayISO() })}>
-                今天
-              </Button>
-              <Button type="button" variant="outline" onClick={() => setForm({ ...form, service_date: tomorrowISO() })}>
-                明天
-              </Button>
             </div>
           </div>
 
-          <div>
-            <Label className="text-sm font-medium">时间段</Label>
-            <div className="grid grid-cols-4 gap-2 mt-2">
-              {TIME_WINDOWS.map((w) => (
-                <button
-                  key={w.value}
-                  type="button"
-                  onClick={() => setForm({ ...form, time_window: w.value })}
-                  className={cn(
-                    "py-3 rounded-md font-semibold border-2 transition-all text-sm",
-                    form.time_window === w.value
-                      ? "bg-primary text-primary-foreground border-transparent"
-                      : "bg-background border-border text-foreground hover:bg-accent"
-                  )}
-                >
-                  {w.label}
-                </button>
-              ))}
+          {/* 时间段 */}
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <h2 className="text-xl font-bold mb-4 text-gray-800">选择时间段</h2>
+            <div className="grid grid-cols-3 gap-3 mb-6">
+              <button
+                type="button"
+                onClick={() => handleTimeSlotChange("AM")}
+                className={cn(
+                  "py-6 rounded-xl font-bold border-4 transition-all text-lg shadow-md hover:scale-105",
+                  form.time_slot === "AM"
+                    ? "bg-yellow-400 text-gray-900 border-transparent shadow-xl scale-105"
+                    : "bg-white border-gray-200 text-gray-700 hover:border-gray-300"
+                )}
+              >
+                <div className="text-3xl mb-2">🌅</div>
+                <div>上午 AM</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleTimeSlotChange("PM")}
+                className={cn(
+                  "py-6 rounded-xl font-bold border-4 transition-all text-lg shadow-md hover:scale-105",
+                  form.time_slot === "PM"
+                    ? "bg-orange-400 text-gray-900 border-transparent shadow-xl scale-105"
+                    : "bg-white border-gray-200 text-gray-700 hover:border-gray-300"
+                )}
+              >
+                <div className="text-3xl mb-2">🌆</div>
+                <div>下午 PM</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleTimeSlotChange("anytime")}
+                className={cn(
+                  "py-6 rounded-xl font-bold border-4 transition-all text-base shadow-md hover:scale-105",
+                  form.time_slot === "anytime"
+                    ? "bg-purple-400 text-white border-transparent shadow-xl scale-105"
+                    : "bg-white border-gray-200 text-gray-700 hover:border-gray-300"
+                )}
+              >
+                <div className="text-3xl mb-2">🕐</div>
+                <div>任意时间</div>
+              </button>
             </div>
-            {form.time_window === "custom" && (
-              <Input
-                placeholder="例如 10:00 - 11:00"
-                value={form.time_window_custom}
-                onChange={(e) => setForm({ ...form, time_window_custom: e.target.value })}
-                className={cn("mt-2", errors.time_window_custom && "border-destructive")}
-              />
+
+            {/* 时间范围滑块 */}
+            {form.time_slot !== "anytime" && (
+              <div className="bg-gray-50 rounded-xl p-6 border-2 border-gray-200">
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-lg font-bold text-gray-700">选择具体时间范围</span>
+                  <span className="text-xl font-bold text-orange-600">
+                    {formatHour(form.time_range[0])} - {formatHour(form.time_range[1])}
+                  </span>
+                </div>
+                <Slider
+                  min={form.time_slot === "AM" ? 7 : 12}
+                  max={form.time_slot === "AM" ? 13 : 19}
+                  step={1}
+                  value={form.time_range}
+                  onValueChange={(value) => setForm({ ...form, time_range: value as [number, number] })}
+                  className="w-full"
+                />
+                <div className="flex justify-between mt-2 text-sm text-gray-500">
+                  <span>{form.time_slot === "AM" ? "7AM" : "12PM"}</span>
+                  <span>{form.time_slot === "AM" ? "1PM" : "7PM"}</span>
+                </div>
+              </div>
             )}
           </div>
-        </div>
 
-        {/* 右栏 */}
-        <div className="space-y-5 bg-card p-5 rounded-lg border">
-          <div>
-            <Label className="text-sm font-medium">地址 *</Label>
-            <Input
-              value={form.address}
-              onChange={(e) => setForm({ ...form, address: e.target.value })}
-              placeholder="123 Main St, Toronto, ON"
-              className={cn("mt-2 text-base h-11", errors.address && "border-destructive")}
-            />
+          {/* 客户信息 */}
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <h2 className="text-xl font-bold mb-4 text-gray-800">客户信息</h2>
+            <div className="space-y-4">
+              <div>
+                <Label className="text-base font-bold text-gray-700 mb-2 block">地址 *</Label>
+                <Input
+                  value={form.address}
+                  onChange={(e) => setForm({ ...form, address: e.target.value })}
+                  placeholder="123 Main St, Toronto, ON"
+                  className={cn("h-12 text-base rounded-xl border-2", errors.address && "border-red-500")}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-base font-bold text-gray-700 mb-2 block">客户姓名 *</Label>
+                  <Input
+                    value={form.customer_name}
+                    onChange={(e) => setForm({ ...form, customer_name: e.target.value })}
+                    className={cn("h-12 text-base rounded-xl border-2", errors.customer_name && "border-red-500")}
+                  />
+                </div>
+                <div>
+                  <Label className="text-base font-bold text-gray-700 mb-2 block">客户电话 *</Label>
+                  <Input
+                    value={form.customer_phone}
+                    onChange={(e) => setForm({ ...form, customer_phone: formatPhone(e.target.value) })}
+                    placeholder="416-555-0123"
+                    className={cn("h-12 text-base rounded-xl border-2", errors.customer_phone && "border-red-500")}
+                  />
+                </div>
+              </div>
+              <div>
+                <Label className="text-base font-bold text-gray-700 mb-2 block">NetSuite 订单号</Label>
+                <Input
+                  value={form.netsuite_order_id}
+                  onChange={(e) => setForm({ ...form, netsuite_order_id: e.target.value })}
+                  placeholder="可选"
+                  className="h-12 text-base rounded-xl border-2"
+                />
+              </div>
+              <div>
+                <Label className="text-base font-bold text-gray-700 mb-2 block">备注</Label>
+                <Textarea
+                  value={form.customer_notes}
+                  onChange={(e) => setForm({ ...form, customer_notes: e.target.value })}
+                  placeholder="如:放路边、门口有狗"
+                  className="min-h-[100px] text-base rounded-xl border-2"
+                />
+              </div>
+            </div>
           </div>
-          <div>
-            <Label className="text-sm font-medium">客户姓名 *</Label>
-            <Input
-              value={form.customer_name}
-              onChange={(e) => setForm({ ...form, customer_name: e.target.value })}
-              className={cn("mt-2 h-11", errors.customer_name && "border-destructive")}
-            />
-          </div>
-          <div>
-            <Label className="text-sm font-medium">客户电话 *</Label>
-            <Input
-              value={form.customer_phone}
-              onChange={(e) => setForm({ ...form, customer_phone: formatPhone(e.target.value) })}
-              placeholder="416-555-0123"
-              className={cn("mt-2 h-11", errors.customer_phone && "border-destructive")}
-            />
-          </div>
-          <div>
-            <Label className="text-sm font-medium">NetSuite 订单号</Label>
-            <Input
-              value={form.netsuite_order_id}
-              onChange={(e) => setForm({ ...form, netsuite_order_id: e.target.value })}
-              placeholder="可选"
-              className="mt-2"
-            />
-          </div>
-          <div>
-            <Label className="text-sm font-medium">备注</Label>
-            <Textarea
-              value={form.customer_notes}
-              onChange={(e) => setForm({ ...form, customer_notes: e.target.value })}
-              placeholder="如:放路边、门口有狗"
-              className="mt-2 min-h-[80px]"
-            />
-          </div>
-        </div>
 
-        <div className="lg:col-span-2">
-          <Button type="submit" className="w-full h-12 text-base font-semibold" disabled={submit.isPending}>
-            {submit.isPending ? "提交中..." : "提交订单"}
+          {/* 提交按钮 */}
+          <Button 
+            type="submit" 
+            className="w-full h-16 text-xl font-bold rounded-2xl shadow-xl hover:scale-105 transition-transform bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600" 
+            disabled={submit.isPending}
+          >
+            {submit.isPending ? "提交中..." : "✓ 提交订单"}
           </Button>
-        </div>
-      </form>
+        </form>
+      </div>
     </div>
   );
 }
-
