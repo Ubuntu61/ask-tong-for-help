@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Slider } from "@/components/ui/slider";
 import { ORDER_TYPES, todayISO, tomorrowISO, formatPhone } from "@/lib/business";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -294,11 +293,13 @@ export function CreateOrderPage() {
                 </button>
               </div>
 
-              {/* 改进的时间范围滑块 */}
+              {/* 自定义时间范围选择器 */}
               {form.time_slot !== "anytime" && (
                 <div className="bg-gray-50 rounded-lg p-3 border-2 border-gray-200">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold text-gray-700">拖动选择时间范围</span>
+                    <span className="text-xs font-bold text-gray-700">
+                      {form.time_range ? "拖动调整时间范围" : "拖动创建时间范围"}
+                    </span>
                     {form.time_range && (
                       <span className="text-sm font-bold text-orange-600">
                         {formatHour(form.time_range[0])} - {formatHour(form.time_range[1])}
@@ -307,8 +308,8 @@ export function CreateOrderPage() {
                   </div>
                   
                   {/* 小时刻度显示 */}
-                  <div className="relative mb-1">
-                    <div className="flex justify-between text-[10px] font-semibold text-gray-600">
+                  <div className="relative mb-2">
+                    <div className="flex justify-between text-[10px] font-semibold text-gray-600 px-1">
                       {Array.from(
                         { length: (form.time_slot === "AM" ? 7 : 8) },
                         (_, i) => {
@@ -323,14 +324,133 @@ export function CreateOrderPage() {
                     </div>
                   </div>
                   
-                  <Slider
-                    min={form.time_slot === "AM" ? 7 : 12}
-                    max={form.time_slot === "AM" ? 13 : 19}
-                    step={1}
-                    value={form.time_range || [form.time_slot === "AM" ? 7 : 12, form.time_slot === "AM" ? 13 : 19]}
-                    onValueChange={(value) => setForm({ ...form, time_range: value as [number, number] })}
-                    className="w-full"
-                  />
+                  {/* 自定义时间轴 */}
+                  <div 
+                    className="relative h-12 bg-white rounded-lg border-2 border-gray-300 cursor-crosshair"
+                    onMouseDown={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const x = e.clientX - rect.left;
+                      const percent = x / rect.width;
+                      const minHour = form.time_slot === "AM" ? 7 : 12;
+                      const maxHour = form.time_slot === "AM" ? 13 : 19;
+                      const hour = Math.round(minHour + percent * (maxHour - minHour));
+                      const clampedHour = Math.max(minHour, Math.min(maxHour, hour));
+                      
+                      // 开始创建新范围
+                      setForm({ ...form, time_range: [clampedHour, clampedHour] });
+                      
+                      const handleMouseMove = (moveEvent: MouseEvent) => {
+                        const moveX = moveEvent.clientX - rect.left;
+                        const movePercent = moveX / rect.width;
+                        const moveHour = Math.round(minHour + movePercent * (maxHour - minHour));
+                        const clampedMoveHour = Math.max(minHour, Math.min(maxHour, moveHour));
+                        
+                        setForm(prev => ({
+                          ...prev,
+                          time_range: [
+                            Math.min(clampedHour, clampedMoveHour),
+                            Math.max(clampedHour, clampedMoveHour)
+                          ]
+                        }));
+                      };
+                      
+                      const handleMouseUp = () => {
+                        document.removeEventListener('mousemove', handleMouseMove);
+                        document.removeEventListener('mouseup', handleMouseUp);
+                      };
+                      
+                      document.addEventListener('mousemove', handleMouseMove);
+                      document.addEventListener('mouseup', handleMouseUp);
+                    }}
+                  >
+                    {/* 显示选中的时间范围 */}
+                    {form.time_range && (
+                      <>
+                        {/* 范围条 */}
+                        <div
+                          className="absolute top-0 bottom-0 bg-orange-400 opacity-50 rounded"
+                          style={{
+                            left: `${((form.time_range[0] - (form.time_slot === "AM" ? 7 : 12)) / (form.time_slot === "AM" ? 6 : 7)) * 100}%`,
+                            width: `${((form.time_range[1] - form.time_range[0]) / (form.time_slot === "AM" ? 6 : 7)) * 100}%`
+                          }}
+                        />
+                        
+                        {/* 左边界拖动手柄 */}
+                        <div
+                          className="absolute top-1/2 -translate-y-1/2 w-4 h-8 bg-orange-600 rounded cursor-ew-resize shadow-md border-2 border-white hover:bg-orange-700 z-10"
+                          style={{
+                            left: `calc(${((form.time_range[0] - (form.time_slot === "AM" ? 7 : 12)) / (form.time_slot === "AM" ? 6 : 7)) * 100}% - 8px)`
+                          }}
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            const rect = e.currentTarget.parentElement!.getBoundingClientRect();
+                            
+                            const handleMouseMove = (moveEvent: MouseEvent) => {
+                              const x = moveEvent.clientX - rect.left;
+                              const percent = x / rect.width;
+                              const minHour = form.time_slot === "AM" ? 7 : 12;
+                              const maxHour = form.time_slot === "AM" ? 13 : 19;
+                              const hour = Math.round(minHour + percent * (maxHour - minHour));
+                              const clampedHour = Math.max(minHour, Math.min(form.time_range![1], hour));
+                              
+                              setForm(prev => ({
+                                ...prev,
+                                time_range: [clampedHour, prev.time_range![1]]
+                              }));
+                            };
+                            
+                            const handleMouseUp = () => {
+                              document.removeEventListener('mousemove', handleMouseMove);
+                              document.removeEventListener('mouseup', handleMouseUp);
+                            };
+                            
+                            document.addEventListener('mousemove', handleMouseMove);
+                            document.addEventListener('mouseup', handleMouseUp);
+                          }}
+                        />
+                        
+                        {/* 右边界拖动手柄 */}
+                        <div
+                          className="absolute top-1/2 -translate-y-1/2 w-4 h-8 bg-orange-600 rounded cursor-ew-resize shadow-md border-2 border-white hover:bg-orange-700 z-10"
+                          style={{
+                            left: `calc(${((form.time_range[1] - (form.time_slot === "AM" ? 7 : 12)) / (form.time_slot === "AM" ? 6 : 7)) * 100}% - 8px)`
+                          }}
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            const rect = e.currentTarget.parentElement!.getBoundingClientRect();
+                            
+                            const handleMouseMove = (moveEvent: MouseEvent) => {
+                              const x = moveEvent.clientX - rect.left;
+                              const percent = x / rect.width;
+                              const minHour = form.time_slot === "AM" ? 7 : 12;
+                              const maxHour = form.time_slot === "AM" ? 13 : 19;
+                              const hour = Math.round(minHour + percent * (maxHour - minHour));
+                              const clampedHour = Math.max(form.time_range![0], Math.min(maxHour, hour));
+                              
+                              setForm(prev => ({
+                                ...prev,
+                                time_range: [prev.time_range![0], clampedHour]
+                              }));
+                            };
+                            
+                            const handleMouseUp = () => {
+                              document.removeEventListener('mousemove', handleMouseMove);
+                              document.removeEventListener('mouseup', handleMouseUp);
+                            };
+                            
+                            document.addEventListener('mousemove', handleMouseMove);
+                            document.addEventListener('mouseup', handleMouseUp);
+                          }}
+                        />
+                      </>
+                    )}
+                  </div>
+                  
+                  {!form.time_range && (
+                    <p className="text-xs text-gray-500 mt-2 text-center">
+                      在时间轴上拖动鼠标创建时间范围
+                    </p>
+                  )}
                 </div>
               )}
             </div>
