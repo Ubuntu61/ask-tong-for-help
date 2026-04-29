@@ -352,6 +352,16 @@ export function DispatchMapWidget({ drivers, orders = [], assignments = [] }: { 
               
               // 显示自定义时段或默认时段
               const timeDisplay = order.time_window_custom || order.time_window || '—';
+              
+              // 桶类型中文映射
+              const binTypeNames: Record<string, string> = {
+                'garbage': '垃圾桶',
+                'brick': '砖桶',
+                'soil': '土桶',
+                'cement': '水泥桶',
+                'asphalt': '沥青桶'
+              };
+              const binTypeName = binTypeNames[order.bin_type] || '—';
                 
               infoWindowRef.current.setContent(`
                 <div style="padding:8px;font-size:12px;color:black;min-width:180px;">
@@ -359,6 +369,10 @@ export function DispatchMapWidget({ drivers, orders = [], assignments = [] }: { 
                   <div style="margin-bottom:4px;">
                     <span style="font-weight:bold;color:#666;">类型:</span> 
                     <span style="color:#2196F3;margin-left:4px;">${order.type}</span>
+                  </div>
+                  <div style="margin-bottom:4px;">
+                    <span style="font-weight:bold;color:#666;">桶类型:</span> 
+                    <span style="color:#FF5722;margin-left:4px;">${binTypeName}</span>
                   </div>
                   <div style="margin-bottom:4px;">
                     <span style="font-weight:bold;color:#666;">尺寸:</span> 
@@ -522,11 +536,22 @@ function createOrderIconWithLabel(order: any): string {
   
   // 订单类型中文映射
   const typeNames: Record<string, string> = {
-    'delivery': '送货',
-    'pickup': '取货',
-    'swap': '换货'
+    'delivery': '送',
+    'pickup': '收',
+    'swap': '换',
+    'material': '料'
   };
   const typeName = typeNames[order.type] || order.type;
+  
+  // 桶类型中文映射
+  const binTypeNames: Record<string, string> = {
+    'garbage': '垃圾桶',
+    'brick': '砖桶',
+    'soil': '土桶',
+    'cement': '水泥桶',
+    'asphalt': '沥青桶'
+  };
+  const binTypeName = binTypeNames[order.bin_type] || '桶';
   
   // 提取街道号和城市名
   const extractAddressShort = (addr: string): string => {
@@ -546,32 +571,34 @@ function createOrderIconWithLabel(order: any): string {
   // 显示自定义时段或默认时段
   const timeDisplay = order.time_window_custom || order.time_window || '';
   
-  // 构建标签文本 - 两行：第一行是类型+尺寸+时段，第二行是简化地址
-  const line1 = `${typeName} ${order.bin_size || ''} ${timeDisplay}`.trim();
+  // 构建标签文本 - 格式：操作+尺寸+桶类型 时段
+  // 例如：换20yd垃圾桶 8AM-10AM
+  const binSize = order.bin_size || '';
+  const line1 = `${typeName}${binSize}${binTypeName} ${timeDisplay}`.trim();
   const line2 = extractAddressShort(order.address);
   
   const lines = [line1, line2].filter(line => line);
   
-  // 计算卡片尺寸 - 增大字体和padding
+  // 计算卡片尺寸 - 缩小尺寸
   const maxLineWidth = Math.max(...lines.map(line => {
     return line.split('').reduce((width, char) => {
-      return width + (/[\u4e00-\u9fa5]/.test(char) ? 13 : 8); // 增大字符宽度
+      return width + (/[\u4e00-\u9fa5]/.test(char) ? 11 : 7); // 恢复正常字符宽度
     }, 0);
   }));
   
-  const cardWidth = Math.max(maxLineWidth + 20, 100); // 增大padding
-  const cardHeight = 12 + lines.length * 18; // 增大行高到18px
-  const svgWidth = Math.max(cardWidth + 12, 120);
-  const svgHeight = cardHeight + 40;
+  const cardWidth = Math.max(maxLineWidth + 16, 90); // 减小padding
+  const cardHeight = 10 + lines.length * 16; // 减小行高到16px
+  const svgWidth = Math.max(cardWidth + 10, 110);
+  const svgHeight = cardHeight + 38;
   
   const cardX = (svgWidth - cardWidth) / 2;
   const pinX = svgWidth / 2;
   
-  // 生成文本行 - 增大字体到14px，使用白色文字
+  // 生成文本行 - 字体12px，白色文字加描边
   let textElements = '';
   lines.forEach((line, index) => {
-    const y = 16 + index * 18; // 调整y位置
-    textElements += `<text x='${svgWidth/2}' y='${y}' text-anchor='middle' font-size='14' font-weight='${index === 0 ? 'bold' : '600'}' fill='${scheme.text}' font-family='Arial, sans-serif' stroke='${scheme.pin}' stroke-width='0.3'>${line}</text>`;
+    const y = 14 + index * 16; // 调整y位置
+    textElements += `<text x='${svgWidth/2}' y='${y}' text-anchor='middle' font-size='12' font-weight='${index === 0 ? 'bold' : '600'}' fill='${scheme.text}' font-family='Arial, sans-serif' stroke='${scheme.pin}' stroke-width='0.3'>${line}</text>`;
   });
   
   // 创建SVG
@@ -582,13 +609,13 @@ function createOrderIconWithLabel(order: any): string {
       ${textElements}
       
       <!-- 连接线 -->
-      <line x1='${pinX}' y1='${cardHeight}' x2='${pinX}' y2='${cardHeight + 4}' stroke='${scheme.pin}' stroke-width='2'/>
+      <line x1='${pinX}' y1='${cardHeight}' x2='${pinX}' y2='${cardHeight + 3}' stroke='${scheme.pin}' stroke-width='2'/>
       
-      <!-- 底部图钉 - 增大尺寸 -->
-      <g transform='translate(${pinX - 14}, ${cardHeight + 4})'>
-        <circle cx='14' cy='12' r='12' fill='${scheme.pin}' stroke='#000' stroke-width='2'/>
-        <circle cx='14' cy='12' r='5' fill='white' opacity='0.95'/>
-        <line x1='14' y1='24' x2='14' y2='36' stroke='${scheme.pin}' stroke-width='3'/>
+      <!-- 底部图钉 -->
+      <g transform='translate(${pinX - 12}, ${cardHeight + 3})'>
+        <circle cx='12' cy='11' r='11' fill='${scheme.pin}' stroke='#000' stroke-width='2'/>
+        <circle cx='12' cy='11' r='4.5' fill='white' opacity='0.95'/>
+        <line x1='12' y1='22' x2='12' y2='35' stroke='${scheme.pin}' stroke-width='2.5'/>
       </g>
     </svg>
   `.trim();
@@ -613,14 +640,33 @@ function updateOrderIcon(marker: any, order: any, assignments: any[], drivers: a
   // 显示自定义时段或默认时段
   const timeDisplay = order.time_window_custom || order.time_window || '';
   
-  // 计算图标尺寸 - 增大尺寸
-  const line1 = `${order.type} ${order.bin_size || ''} ${timeDisplay}`.trim();
+  // 桶类型中文映射
+  const binTypeNames: Record<string, string> = {
+    'garbage': '垃圾桶',
+    'brick': '砖桶',
+    'soil': '土桶',
+    'cement': '水泥桶',
+    'asphalt': '沥青桶'
+  };
+  const binTypeName = binTypeNames[order.bin_type] || '桶';
+  
+  // 计算图标尺寸 - 缩小尺寸
+  const binSize = order.bin_size || '';
+  const typeNames: Record<string, string> = {
+    'delivery': '送',
+    'pickup': '收',
+    'swap': '换',
+    'material': '料'
+  };
+  const typeName = typeNames[order.type] || order.type;
+  
+  const line1 = `${typeName}${binSize}${binTypeName} ${timeDisplay}`.trim();
   const line2 = extractAddressShort(order.address);
   const lines = [line1, line2].filter(line => line);
   
-  const baseHeight = 12 + lines.length * 18 + 40;
-  const scaleFactor = 1.2; // 增大到1.2倍
-  const width = 120 * scaleFactor;
+  const baseHeight = 10 + lines.length * 16 + 38;
+  const scaleFactor = 1.0; // 恢复到1.0倍
+  const width = 110 * scaleFactor;
   const height = baseHeight * scaleFactor;
   
   marker.setIcon({
