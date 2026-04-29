@@ -47,7 +47,7 @@ export function CreateOrderPage() {
   // 格式化时间范围为字符串
   const formatTimeRange = (slot: TimeSlot, range: [number, number] | null): string => {
     if (slot === "anytime") return "anytime";
-    if (!range) return "anytime"; // 如果没有选择范围，默认anytime
+    if (!range) return slot; // 如果没有选择范围，返回AM或PM
     const [start, end] = range;
     const formatHour = (h: number) => {
       if (h === 12) return "12PM";
@@ -59,12 +59,27 @@ export function CreateOrderPage() {
 
   const submit = useMutation({
     mutationFn: async (payload: typeof form) => {
-      const timeWindow = formatTimeRange(payload.time_slot, payload.time_range);
-      
       // 从customer_contact中分离姓名和电话
       const contactParts = payload.customer_contact.trim().split(/\s+/);
       const phone = contactParts.find(part => /\d{3}[-.]?\d{3}[-.]?\d{4}/.test(part)) || "";
       const name = contactParts.filter(part => part !== phone).join(" ");
+      
+      // 处理时间窗口
+      let timeWindow: string;
+      let timeWindowCustom: string | null = null;
+      
+      if (payload.time_slot === "anytime") {
+        timeWindow = "AM"; // 默认使用AM
+        timeWindowCustom = "anytime";
+      } else if (payload.time_range) {
+        // 如果用户选择了自定义时间范围
+        timeWindow = "custom";
+        timeWindowCustom = formatTimeRange(payload.time_slot, payload.time_range);
+      } else {
+        // 如果只选择了AM/PM，没有具体范围
+        timeWindow = payload.time_slot;
+        timeWindowCustom = null;
+      }
       
       const insertPayload = {
         order_number: "", // 触发器自动生成
@@ -72,7 +87,7 @@ export function CreateOrderPage() {
         bin_size: payload.type === "material" ? null : payload.bin_size,
         service_date: payload.service_date,
         time_window: timeWindow,
-        time_window_custom: null,
+        time_window_custom: timeWindowCustom,
         address: payload.address.trim(),
         customer_name: name || payload.customer_contact.trim(),
         customer_phone: phone,
@@ -293,17 +308,26 @@ export function CreateOrderPage() {
                 </button>
               </div>
 
-              {/* 自定义时间范围选择器 */}
+              {/* 自定义时间范围选择器 - 可选 */}
               {form.time_slot !== "anytime" && (
                 <div className="bg-gray-50 rounded-lg p-3 border-2 border-gray-200">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-bold text-gray-700">
-                      {form.time_range ? "拖动调整时间范围" : "拖动创建时间范围"}
+                      {form.time_range ? "拖动调整时间范围（可选）" : "拖动创建具体时间范围（可选）"}
                     </span>
                     {form.time_range && (
-                      <span className="text-sm font-bold text-orange-600">
-                        {formatHour(form.time_range[0])} - {formatHour(form.time_range[1])}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-orange-600">
+                          {formatHour(form.time_range[0])} - {formatHour(form.time_range[1])}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setForm({ ...form, time_range: null })}
+                          className="text-xs text-red-600 hover:text-red-700 underline"
+                        >
+                          清除
+                        </button>
+                      </div>
                     )}
                   </div>
                   
@@ -448,7 +472,7 @@ export function CreateOrderPage() {
                   
                   {!form.time_range && (
                     <p className="text-xs text-gray-500 mt-2 text-center">
-                      在时间轴上拖动鼠标创建时间范围
+                      可选：在时间轴上拖动创建具体时间范围，或直接提交使用{form.time_slot === "AM" ? "上午" : "下午"}时段
                     </p>
                   )}
                 </div>

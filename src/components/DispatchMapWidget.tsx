@@ -146,17 +146,23 @@ export function DispatchMapWidget({ drivers, orders = [], assignments = [] }: { 
   useEffect(() => {
     let active = true;
     const fetchData = async () => {
-      const result = await fetchSamsaraVehicles();
-      if (active && result.success && result.data) {
-        setSamsaraLocs(result.data);
-        console.log(`✅ 获取到 ${result.data.length} 辆 Samsara 车辆`);
-      } else if (result.error) {
-        console.warn("Samsara 获取失败:", result.error);
+      try {
+        const result = await fetchSamsaraVehicles();
+        if (active && result.success && result.data) {
+          setSamsaraLocs(result.data);
+          console.log(`✅ 获取到 ${result.data.length} 辆 Samsara 车辆`);
+        } else if (result.error) {
+          console.warn("⚠️ Samsara 获取失败:", result.error);
+          console.warn("📍 地图将继续显示订单，但不显示车辆位置");
+        }
+      } catch (error) {
+        console.error("❌ Samsara API 调用异常:", error);
+        console.warn("📍 地图将继续显示订单，但不显示车辆位置");
       }
     };
     
     fetchData();
-    const id = setInterval(fetchData, 10000);
+    const id = setInterval(fetchData, 30000); // 改为30秒刷新一次，减少API调用
     return () => { active = false; clearInterval(id); };
   }, []);
 
