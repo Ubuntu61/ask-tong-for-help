@@ -85,6 +85,7 @@ export function CreateOrderPage() {
         order_number: "", // 触发器自动生成
         type: payload.type,
         bin_size: payload.type === "material" ? null : payload.bin_size,
+        bin_type: payload.type === "material" ? null : payload.bin_type,
         service_date: payload.service_date,
         time_window: timeWindow,
         time_window_custom: timeWindowCustom,
