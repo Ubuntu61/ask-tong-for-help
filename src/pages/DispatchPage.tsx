@@ -733,34 +733,31 @@ function OrderNodeDisplay({
   const binTypeName = order.bin_type ? binTypeNames[order.bin_type] || order.bin_type : '';
 
   return (
-    <div className="group relative rounded-lg border-l-4 border-l-blue-500 bg-card shadow-md p-3 transition-all duration-300 hover:shadow-xl hover:scale-105 hover:-translate-y-1 w-[220px] shrink-0">
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          <Badge className={cn("text-[10px]", tm.className)}>{tm.label}</Badge>
-          <span className="text-[11px] text-muted-foreground font-mono">
-            {order.order_number}
-          </span>
-        </div>
-        <div className="text-sm font-semibold">
+    <div className="group relative rounded-lg border-l-4 border-l-blue-500 bg-card shadow-md p-2.5 transition-all duration-300 hover:shadow-xl hover:scale-105 hover:z-10 w-[180px] shrink-0">
+      <div className="flex flex-col gap-1.5">
+        <Badge className={cn("text-[9px] w-fit", tm.className)}>{tm.label}</Badge>
+        <div className="text-xs font-semibold leading-tight">
           {tm.emoji} {tm.label} {order.bin_size ? `${order.bin_size}yd` : ""} {binTypeName}
         </div>
-        <div className="text-xs text-muted-foreground truncate" title={order.address}>{order.address}</div>
-        <div className="text-xs text-primary font-medium">{timeLabel(order)}</div>
+        <div className="text-[10px] text-muted-foreground leading-snug break-words" title={order.address}>
+          {order.address}
+        </div>
+        <div className="text-[10px] text-primary font-medium">{timeLabel(order)}</div>
         {order.customer_notes && (
-          <div className="text-[10px] text-status-progress truncate">
+          <div className="text-[9px] text-status-progress truncate">
             📝 {order.customer_notes}
           </div>
         )}
         {conflict && vehicle && (
-          <div className="text-[10px] text-destructive font-bold flex items-center gap-1">
-            <AlertTriangle className="h-3 w-3" /> {vehicle.type} 不支持 {order.bin_size}yd 桶
+          <div className="text-[9px] text-destructive font-bold flex items-center gap-1">
+            <AlertTriangle className="h-2.5 w-2.5" /> {vehicle.type} 不支持 {order.bin_size}yd 桶
           </div>
         )}
       </div>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className="absolute top-2 right-2 text-muted-foreground/50 hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-            <MoreVertical className="h-4 w-4" />
+          <button className="absolute top-1.5 right-1.5 text-muted-foreground/50 hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+            <MoreVertical className="h-3.5 w-3.5" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="text-xs min-w-[120px]">
@@ -793,29 +790,29 @@ function StepNodeDisplay({
   const stepLabel = stepTypeLabels[step.step_type] || step.step_type;
 
   return (
-    <div className="group relative rounded-lg border-l-4 border-l-gray-400 bg-card/80 shadow-sm p-2 transition-all duration-300 hover:shadow-lg hover:scale-105 hover:-translate-y-1 w-[180px] shrink-0">
-      <div className="flex flex-col gap-1.5">
-        <Badge variant="outline" className="text-[9px] w-fit">手动步骤</Badge>
-        <div className="text-xs font-semibold">
+    <div className="group relative rounded-lg border-l-4 border-l-gray-400 bg-card/80 shadow-sm p-2 transition-all duration-300 hover:shadow-lg hover:scale-105 hover:z-10 w-[150px] shrink-0">
+      <div className="flex flex-col gap-1">
+        <Badge variant="outline" className="text-[8px] w-fit">手动步骤</Badge>
+        <div className="text-[11px] font-semibold">
           {stepLabel}
         </div>
-        <div className="text-[10px] text-muted-foreground truncate" title={step.location}>
-          <MapPin className="h-2.5 w-2.5 inline mr-1" />
+        <div className="text-[9px] text-muted-foreground leading-snug break-words" title={step.location}>
+          <MapPin className="h-2 w-2 inline mr-0.5" />
           {step.location}
         </div>
         {step.bin_id && (
-          <div className="text-[10px] text-primary">桶号: {step.bin_id}</div>
+          <div className="text-[9px] text-primary">桶: {step.bin_id}</div>
         )}
         {step.notes && (
-          <div className="text-[9px] text-muted-foreground truncate">
+          <div className="text-[8px] text-muted-foreground truncate">
             📝 {step.notes}
           </div>
         )}
       </div>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className="absolute top-1.5 right-1.5 text-muted-foreground/50 hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-            <MoreVertical className="h-3.5 w-3.5" />
+          <button className="absolute top-1 right-1 text-muted-foreground/50 hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+            <MoreVertical className="h-3 w-3" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="text-xs min-w-[120px]">
@@ -865,118 +862,122 @@ function InsertStepButton({
   };
 
   return (
-    <div className="w-full p-3 border-2 border-primary rounded-lg bg-card shadow-lg space-y-2.5">
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-sm font-semibold text-primary">✨ 插入步骤</span>
-        <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
-          ✕
-        </button>
-      </div>
-      
-      {!showCustomLocation ? (
-        <div>
-          <Label className="text-xs font-medium">📍 地点</Label>
-          <Select value={location} onValueChange={(v) => {
-            if (v === "custom") {
-              setShowCustomLocation(true);
-              setLocation("");
-            } else {
-              setLocation(v);
-            }
-          }}>
-            <SelectTrigger className="mt-1 h-8 text-xs">
-              <SelectValue placeholder="选择常用地点" />
-            </SelectTrigger>
-            <SelectContent>
-              {commonLocations.map((loc) => (
-                <SelectItem key={loc.id} value={loc.address} className="text-xs">
-                  {loc.name} - {loc.address}
-                </SelectItem>
-              ))}
-              <SelectItem value="custom" className="text-xs text-primary font-medium">
-                + 手动输入地址
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      ) : (
-        <div>
-          <Label className="text-xs font-medium">📍 自定义地址</Label>
-          <div className="flex gap-1 mt-1">
+    <div className="relative shrink-0 flex items-center">
+      {isActive ? (
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[200px] p-2.5 border-2 border-primary rounded-lg bg-card shadow-2xl space-y-2">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-semibold text-primary">插入步骤</span>
+            <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+              ✕
+            </button>
+          </div>
+          
+          {!showCustomLocation ? (
+            <div>
+              <Label className="text-[10px] font-medium">地点</Label>
+              <Select value={location} onValueChange={(v) => {
+                if (v === "custom") {
+                  setShowCustomLocation(true);
+                  setLocation("");
+                } else {
+                  setLocation(v);
+                }
+              }}>
+                <SelectTrigger className="mt-0.5 h-7 text-[10px]">
+                  <SelectValue placeholder="选择地点" />
+                </SelectTrigger>
+                <SelectContent>
+                  {commonLocations.map((loc) => (
+                    <SelectItem key={loc.id} value={loc.address} className="text-[10px]">
+                      {loc.name}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="custom" className="text-[10px] text-primary font-medium">
+                    + 自定义
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          ) : (
+            <div>
+              <Label className="text-[10px] font-medium">自定义地址</Label>
+              <div className="flex gap-1 mt-0.5">
+                <input
+                  type="text"
+                  value={customLocation}
+                  onChange={(e) => setCustomLocation(e.target.value)}
+                  placeholder="输入地址"
+                  className="flex-1 h-7 px-1.5 rounded-md border bg-background text-[10px]"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setShowCustomLocation(false);
+                    setCustomLocation("");
+                  }}
+                  className="h-7 px-1.5 text-[10px]"
+                >
+                  ✕
+                </Button>
+              </div>
+            </div>
+          )}
+          
+          <div>
+            <Label className="text-[10px] font-medium">动作</Label>
+            <Select value={stepType} onValueChange={setStepType}>
+              <SelectTrigger className="mt-0.5 h-7 text-[10px]">
+                <SelectValue placeholder="选择动作" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pickup_bin" className="text-[10px]">取桶</SelectItem>
+                <SelectItem value="drop_bin" className="text-[10px]">放桶</SelectItem>
+                <SelectItem value="dump_waste" className="text-[10px]">倒垃圾</SelectItem>
+                <SelectItem value="load_material" className="text-[10px]">装料</SelectItem>
+                <SelectItem value="unload_material" className="text-[10px]">卸料</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div>
+            <Label className="text-[10px] font-medium">桶号 (可选)</Label>
+            <Select value={binId || "none"} onValueChange={(v) => setBinId(v === "none" ? "" : v)}>
+              <SelectTrigger className="mt-0.5 h-7 text-[10px]">
+                <SelectValue placeholder="不指定" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none" className="text-[10px]">不指定</SelectItem>
+                {bins.map((bin) => (
+                  <SelectItem key={bin.id} value={bin.id} className="text-[10px]">
+                    {bin.bin_number} ({bin.size}yd)
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div>
+            <Label className="text-[10px] font-medium">备注 (可选)</Label>
             <input
               type="text"
-              value={customLocation}
-              onChange={(e) => setCustomLocation(e.target.value)}
-              placeholder="输入地址"
-              className="flex-1 h-8 px-2 rounded-md border bg-background text-xs"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="备注"
+              className="w-full h-7 px-1.5 rounded-md border bg-background text-[10px] mt-0.5"
             />
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setShowCustomLocation(false);
-                setCustomLocation("");
-              }}
-              className="h-8 px-2 text-xs"
-            >
+          </div>
+          
+          <div className="flex gap-1.5 pt-0.5">
+            <Button size="sm" onClick={handleInsert} className="flex-1 h-7 text-[10px] font-medium">
+              确认
+            </Button>
+            <Button size="sm" variant="outline" onClick={onClose} className="h-7 text-[10px]">
               取消
             </Button>
           </div>
         </div>
-      )}
-      
-      <div>
-        <Label className="text-xs font-medium">⚡ 动作</Label>
-        <Select value={stepType} onValueChange={setStepType}>
-          <SelectTrigger className="mt-1 h-8 text-xs">
-            <SelectValue placeholder="选择动作" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="pickup_bin" className="text-xs">🔼 取桶</SelectItem>
-            <SelectItem value="drop_bin" className="text-xs">🔽 放桶</SelectItem>
-            <SelectItem value="dump_waste" className="text-xs">🗑️ 倒垃圾</SelectItem>
-            <SelectItem value="load_material" className="text-xs">📦 装料</SelectItem>
-            <SelectItem value="unload_material" className="text-xs">📤 卸料</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      
-      <div>
-        <Label className="text-xs font-medium">🪣 桶号 (可选)</Label>
-        <Select value={binId || "none"} onValueChange={(v) => setBinId(v === "none" ? "" : v)}>
-          <SelectTrigger className="mt-1 h-8 text-xs">
-            <SelectValue placeholder="不指定" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none" className="text-xs">不指定</SelectItem>
-            {bins.map((bin) => (
-              <SelectItem key={bin.id} value={bin.id} className="text-xs">
-                {bin.bin_number} ({bin.size}yd)
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      
-      <div>
-        <Label className="text-xs font-medium">📝 备注 (可选)</Label>
-        <input
-          type="text"
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="备注信息"
-          className="w-full h-8 px-2 rounded-md border bg-background text-xs mt-1"
-        />
-      </div>
-      
-      <div className="flex gap-2 pt-1">
-        <Button size="sm" onClick={handleInsert} className="flex-1 h-8 text-xs font-medium">
-          ✓ 确认插入
-        </Button>
-        <Button size="sm" variant="outline" onClick={onClose} className="h-8 text-xs">
-          取消
-        </Button>
-      </div>
+      ) : null}
     </div>
   );
 }
@@ -1168,37 +1169,38 @@ function DriverColumn({
       <div
         ref={setNodeRef}
         className={cn(
-          "p-3 flex flex-row gap-3 overflow-x-auto min-h-[160px] transition-colors group custom-scrollbar",
+          "p-3 flex flex-row gap-0 overflow-x-auto min-h-[160px] transition-colors custom-scrollbar",
           isOver ? "bg-primary/5" : "bg-muted/5"
         )}
       >
-        {/* 顶部插入按钮 - 只在悬停时显示 */}
-        <div className="relative shrink-0 flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
-          {insertStepAt?.driverId === driver.id && insertStepAt?.position === 0 ? (
-            <div className="w-[240px]">
-              <InsertStepButton
-                driverId={driver.id}
-                position={0}
-                isActive={true}
-                onClick={() => {}}
-                onClose={() => setInsertStepAt(null)}
-                onInsert={onInsertStep}
-                commonLocations={commonLocations}
-                bins={bins}
-              />
-            </div>
-          ) : (
-            <button
-              onClick={() => setInsertStepAt({ driverId: driver.id, position: 0 })}
-              className="w-10 h-10 rounded-full border-2 border-dashed border-primary/40 hover:border-primary hover:bg-primary/10 transition-all flex items-center justify-center text-primary"
-            >
-              <Plus className="h-5 w-5" />
-            </button>
-          )}
-        </div>
-        
         {allNodes.map((node, index) => (
-          <div key={node.type === 'order' ? (node.data as Assignment).id : (node.data as JobStep).id} className="flex items-center gap-3 shrink-0">
+          <div key={node.type === 'order' ? (node.data as Assignment).id : (node.data as JobStep).id} className="relative flex items-center shrink-0 group/item">
+            {/* 前置插入按钮 - 只在第一个节点前显示，且只在悬停时显示 */}
+            {index === 0 && (
+              <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 opacity-0 group-hover/item:opacity-100 transition-opacity z-20">
+                {insertStepAt?.driverId === driver.id && insertStepAt?.position === (index === 0 ? 0 : node.stepNumber) ? (
+                  <InsertStepButton
+                    driverId={driver.id}
+                    position={index === 0 ? 0 : node.stepNumber}
+                    isActive={true}
+                    onClick={() => {}}
+                    onClose={() => setInsertStepAt(null)}
+                    onInsert={onInsertStep}
+                    commonLocations={commonLocations}
+                    bins={bins}
+                  />
+                ) : (
+                  <button
+                    onClick={() => setInsertStepAt({ driverId: driver.id, position: index === 0 ? 0 : node.stepNumber })}
+                    className="w-8 h-8 rounded-full border-2 border-dashed border-primary/50 hover:border-primary hover:bg-primary/10 transition-all flex items-center justify-center text-primary bg-card shadow-md"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            )}
+            
+            {/* 卡片内容 */}
             {node.type === 'order' ? (
               <OrderNodeDisplay
                 assignment={node.data as Assignment}
@@ -1212,27 +1214,25 @@ function DriverColumn({
               />
             )}
             
-            {/* 节点之间的插入按钮 - 只在悬停时显示 */}
-            <div className="relative shrink-0 flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+            {/* 后置插入按钮 - 只在悬停时显示 */}
+            <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 opacity-0 group-hover/item:opacity-100 transition-opacity z-20">
               {insertStepAt?.driverId === driver.id && insertStepAt?.position === node.stepNumber + 1 ? (
-                <div className="w-[240px]">
-                  <InsertStepButton
-                    driverId={driver.id}
-                    position={node.stepNumber + 1}
-                    isActive={true}
-                    onClick={() => {}}
-                    onClose={() => setInsertStepAt(null)}
-                    onInsert={onInsertStep}
-                    commonLocations={commonLocations}
-                    bins={bins}
-                  />
-                </div>
+                <InsertStepButton
+                  driverId={driver.id}
+                  position={node.stepNumber + 1}
+                  isActive={true}
+                  onClick={() => {}}
+                  onClose={() => setInsertStepAt(null)}
+                  onInsert={onInsertStep}
+                  commonLocations={commonLocations}
+                  bins={bins}
+                />
               ) : (
                 <button
                   onClick={() => setInsertStepAt({ driverId: driver.id, position: node.stepNumber + 1 })}
-                  className="w-10 h-10 rounded-full border-2 border-dashed border-primary/40 hover:border-primary hover:bg-primary/10 transition-all flex items-center justify-center text-primary"
+                  className="w-8 h-8 rounded-full border-2 border-dashed border-primary/50 hover:border-primary hover:bg-primary/10 transition-all flex items-center justify-center text-primary bg-card shadow-md"
                 >
-                  <Plus className="h-5 w-5" />
+                  <Plus className="h-4 w-4" />
                 </button>
               )}
             </div>
