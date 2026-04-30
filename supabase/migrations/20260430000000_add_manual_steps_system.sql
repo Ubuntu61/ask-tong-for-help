@@ -16,19 +16,6 @@ INSERT INTO public.common_locations (name, address, type) VALUES
   ('Sheppard Yard', '12441 Sheppard Ave, Toronto, ON', 'depot')
 ON CONFLICT DO NOTHING;
 
--- 创建动作类型枚举（如果不存在）
-DO $$ BEGIN
-  CREATE TYPE public.step_action AS ENUM (
-    'pickup_bin',      -- 取桶
-    'drop_bin',        -- 放桶
-    'dump_waste',      -- 倒垃圾
-    'load_material',   -- 装料
-    'unload_material'  -- 卸料
-  );
-EXCEPTION
-  WHEN duplicate_object THEN null;
-END $$;
-
 -- 调整 job_steps 表结构，支持两种节点
 -- 1. 添加 driver_id 和 scheduled_date（必填）
 ALTER TABLE public.job_steps 
@@ -43,47 +30,17 @@ ALTER COLUMN assignment_id DROP NOT NULL;
 ALTER TABLE public.job_steps 
 ADD COLUMN IF NOT EXISTS order_id UUID REFERENCES public.orders(id) ON DELETE CASCADE;
 
--- 4. 修改 action 字段类型（如果需要）
--- 先检查是否已经是 TEXT 类型
-DO $$ 
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_name = 'job_steps' 
-    AND column_name = 'action' 
-    AND data_type = 'text'
-  ) THEN
-    ALTER TABLE public.job_steps ALTER COLUMN action TYPE TEXT;
-  END IF;
-END $$;
-
--- 5. 添加节点类型标识（可选，用于区分）
+-- 4. 添加节点类型标识
 ALTER TABLE public.job_steps 
 ADD COLUMN IF NOT EXISTS node_type TEXT CHECK (node_type IN ('order', 'step')) DEFAULT 'step';
 
--- 6. 添加备注字段
+-- 5. 添加备注字段
 ALTER TABLE public.job_steps 
 ADD COLUMN IF NOT EXISTS notes TEXT;
 
--- 7. 确保 step_number 存在
+-- 6. 将 location 改为可选（因为原来是 NOT NULL）
 ALTER TABLE public.job_steps 
-ADD COLUMN IF NOT EXISTS step_number INT;
-
--- 8. 添加 bin_number_reported 字段（司机报告的桶号）
-ALTER TABLE public.job_steps 
-ADD COLUMN IF NOT EXISTS bin_number_reported TEXT;
-
--- 9. 添加称重单和重量字段
-ALTER TABLE public.job_steps 
-ADD COLUMN IF NOT EXISTS weigh_ticket_url TEXT,
-ADD COLUMN IF NOT EXISTS weight_kg DECIMAL;
-
--- 10. 添加要求字段
-ALTER TABLE public.job_steps 
-ADD COLUMN IF NOT EXISTS requires_photo BOOLEAN DEFAULT false,
-ADD COLUMN IF NOT EXISTS requires_bin_number BOOLEAN DEFAULT false,
-ADD COLUMN IF NOT EXISTS requires_weigh_ticket BOOLEAN DEFAULT false,
-ADD COLUMN IF NOT EXISTS requires_weight BOOLEAN DEFAULT false;
+ALTER COLUMN location DROP NOT NULL;
 
 -- 更新现有数据：为已有的 job_steps 填充 driver_id 和 scheduled_date
 UPDATE public.job_steps js
@@ -109,10 +66,7 @@ COMMENT ON COLUMN public.job_steps.step_number IS '必填，执行顺序';
 COMMENT ON COLUMN public.job_steps.order_id IS '可选，订单节点才有';
 COMMENT ON COLUMN public.job_steps.assignment_id IS '可选，订单节点才有';
 COMMENT ON COLUMN public.job_steps.node_type IS '节点类型：order(订单节点) 或 step(手动步骤)';
-COMMENT ON COLUMN public.job_steps.action IS '动作类型：pickup_bin, drop_bin, dump_waste, load_material, unload_material';
-COMMENT ON COLUMN public.job_steps.bin_number_reported IS '司机报告的桶号';
-COMMENT ON COLUMN public.job_steps.weigh_ticket_url IS '称重单照片URL';
-COMMENT ON COLUMN public.job_steps.weight_kg IS '重量（公斤）';
+COMMENT ON COLUMN public.job_steps.step_type IS '动作类型：使用现有的step_type枚举';
 
 -- 常用地点表的 RLS
 ALTER TABLE public.common_locations ENABLE ROW LEVEL SECURITY;
