@@ -735,7 +735,6 @@ function OrderNodeDisplay({
   return (
     <div className="group relative rounded-lg border-l-4 border-l-blue-500 bg-card shadow-md p-2.5 transition-all duration-300 hover:shadow-xl hover:scale-105 hover:z-10 w-[180px] shrink-0">
       <div className="flex flex-col gap-1.5">
-        <Badge className={cn("text-[9px] w-fit", tm.className)}>{tm.label}</Badge>
         <div className="text-xs font-semibold leading-tight">
           {tm.emoji} {tm.label} {order.bin_size ? `${order.bin_size}yd` : ""} {binTypeName}
         </div>
@@ -861,123 +860,121 @@ function InsertStepButton({
     setShowCustomLocation(false);
   };
 
+  if (!isActive) return null;
+
   return (
-    <div className="relative shrink-0 flex items-center">
-      {isActive ? (
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[200px] p-2.5 border-2 border-primary rounded-lg bg-card shadow-2xl space-y-2">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-semibold text-primary">插入步骤</span>
-            <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
-              ✕
-            </button>
-          </div>
-          
-          {!showCustomLocation ? (
-            <div>
-              <Label className="text-[10px] font-medium">地点</Label>
-              <Select value={location} onValueChange={(v) => {
-                if (v === "custom") {
-                  setShowCustomLocation(true);
-                  setLocation("");
-                } else {
-                  setLocation(v);
-                }
-              }}>
-                <SelectTrigger className="mt-0.5 h-7 text-[10px]">
-                  <SelectValue placeholder="选择地点" />
-                </SelectTrigger>
-                <SelectContent>
-                  {commonLocations.map((loc) => (
-                    <SelectItem key={loc.id} value={loc.address} className="text-[10px]">
-                      {loc.name}
-                    </SelectItem>
-                  ))}
-                  <SelectItem value="custom" className="text-[10px] text-primary font-medium">
-                    + 自定义
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          ) : (
-            <div>
-              <Label className="text-[10px] font-medium">自定义地址</Label>
-              <div className="flex gap-1 mt-0.5">
-                <input
-                  type="text"
-                  value={customLocation}
-                  onChange={(e) => setCustomLocation(e.target.value)}
-                  placeholder="输入地址"
-                  className="flex-1 h-7 px-1.5 rounded-md border bg-background text-[10px]"
-                />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setShowCustomLocation(false);
-                    setCustomLocation("");
-                  }}
-                  className="h-7 px-1.5 text-[10px]"
-                >
-                  ✕
-                </Button>
-              </div>
-            </div>
-          )}
-          
-          <div>
-            <Label className="text-[10px] font-medium">动作</Label>
-            <Select value={stepType} onValueChange={setStepType}>
-              <SelectTrigger className="mt-0.5 h-7 text-[10px]">
-                <SelectValue placeholder="选择动作" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="pickup_bin" className="text-[10px]">取桶</SelectItem>
-                <SelectItem value="drop_bin" className="text-[10px]">放桶</SelectItem>
-                <SelectItem value="dump_waste" className="text-[10px]">倒垃圾</SelectItem>
-                <SelectItem value="load_material" className="text-[10px]">装料</SelectItem>
-                <SelectItem value="unload_material" className="text-[10px]">卸料</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          
-          <div>
-            <Label className="text-[10px] font-medium">桶号 (可选)</Label>
-            <Select value={binId || "none"} onValueChange={(v) => setBinId(v === "none" ? "" : v)}>
-              <SelectTrigger className="mt-0.5 h-7 text-[10px]">
-                <SelectValue placeholder="不指定" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none" className="text-[10px]">不指定</SelectItem>
-                {bins.map((bin) => (
-                  <SelectItem key={bin.id} value={bin.id} className="text-[10px]">
-                    {bin.bin_number} ({bin.size}yd)
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          
-          <div>
-            <Label className="text-[10px] font-medium">备注 (可选)</Label>
+    <div className="w-[200px] p-2.5 border-2 border-primary rounded-lg bg-card shadow-2xl space-y-2">
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-xs font-semibold text-primary">插入步骤</span>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+          ✕
+        </button>
+      </div>
+      
+      {!showCustomLocation ? (
+        <div>
+          <Label className="text-[10px] font-medium">地点</Label>
+          <Select value={location} onValueChange={(v) => {
+            if (v === "custom") {
+              setShowCustomLocation(true);
+              setLocation("");
+            } else {
+              setLocation(v);
+            }
+          }}>
+            <SelectTrigger className="mt-0.5 h-7 text-[10px]">
+              <SelectValue placeholder="选择地点" />
+            </SelectTrigger>
+            <SelectContent>
+              {commonLocations.map((loc) => (
+                <SelectItem key={loc.id} value={loc.address} className="text-[10px]">
+                  {loc.name}
+                </SelectItem>
+              ))}
+              <SelectItem value="custom" className="text-[10px] text-primary font-medium">
+                + 自定义
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      ) : (
+        <div>
+          <Label className="text-[10px] font-medium">自定义地址</Label>
+          <div className="flex gap-1 mt-0.5">
             <input
               type="text"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="备注"
-              className="w-full h-7 px-1.5 rounded-md border bg-background text-[10px] mt-0.5"
+              value={customLocation}
+              onChange={(e) => setCustomLocation(e.target.value)}
+              placeholder="输入地址"
+              className="flex-1 h-7 px-1.5 rounded-md border bg-background text-[10px]"
             />
-          </div>
-          
-          <div className="flex gap-1.5 pt-0.5">
-            <Button size="sm" onClick={handleInsert} className="flex-1 h-7 text-[10px] font-medium">
-              确认
-            </Button>
-            <Button size="sm" variant="outline" onClick={onClose} className="h-7 text-[10px]">
-              取消
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setShowCustomLocation(false);
+                setCustomLocation("");
+              }}
+              className="h-7 px-1.5 text-[10px]"
+            >
+              ✕
             </Button>
           </div>
         </div>
-      ) : null}
+      )}
+      
+      <div>
+        <Label className="text-[10px] font-medium">动作</Label>
+        <Select value={stepType} onValueChange={setStepType}>
+          <SelectTrigger className="mt-0.5 h-7 text-[10px]">
+            <SelectValue placeholder="选择动作" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="pickup_bin" className="text-[10px]">取桶</SelectItem>
+            <SelectItem value="drop_bin" className="text-[10px]">放桶</SelectItem>
+            <SelectItem value="dump_waste" className="text-[10px]">倒垃圾</SelectItem>
+            <SelectItem value="load_material" className="text-[10px]">装料</SelectItem>
+            <SelectItem value="unload_material" className="text-[10px]">卸料</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      
+      <div>
+        <Label className="text-[10px] font-medium">桶号 (可选)</Label>
+        <Select value={binId || "none"} onValueChange={(v) => setBinId(v === "none" ? "" : v)}>
+          <SelectTrigger className="mt-0.5 h-7 text-[10px]">
+            <SelectValue placeholder="不指定" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none" className="text-[10px]">不指定</SelectItem>
+            {bins.map((bin) => (
+              <SelectItem key={bin.id} value={bin.id} className="text-[10px]">
+                {bin.bin_number} ({bin.size}yd)
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      
+      <div>
+        <Label className="text-[10px] font-medium">备注 (可选)</Label>
+        <input
+          type="text"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="备注"
+          className="w-full h-7 px-1.5 rounded-md border bg-background text-[10px] mt-0.5"
+        />
+      </div>
+      
+      <div className="flex gap-1.5 pt-0.5">
+        <Button size="sm" onClick={handleInsert} className="flex-1 h-7 text-[10px] font-medium">
+          确认
+        </Button>
+        <Button size="sm" variant="outline" onClick={onClose} className="h-7 text-[10px]">
+          取消
+        </Button>
+      </div>
     </div>
   );
 }
@@ -1169,34 +1166,37 @@ function DriverColumn({
       <div
         ref={setNodeRef}
         className={cn(
-          "p-3 flex flex-row gap-0 overflow-x-auto min-h-[160px] transition-colors custom-scrollbar",
+          "relative p-3 flex flex-row gap-0 overflow-x-auto min-h-[160px] transition-colors custom-scrollbar",
           isOver ? "bg-primary/5" : "bg-muted/5"
         )}
       >
+        {/* 插入表单 - 固定在容器顶部中央 */}
+        {insertStepAt?.driverId === driver.id && (
+          <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50">
+            <InsertStepButton
+              driverId={driver.id}
+              position={insertStepAt.position}
+              isActive={true}
+              onClick={() => {}}
+              onClose={() => setInsertStepAt(null)}
+              onInsert={onInsertStep}
+              commonLocations={commonLocations}
+              bins={bins}
+            />
+          </div>
+        )}
+        
         {allNodes.map((node, index) => (
           <div key={node.type === 'order' ? (node.data as Assignment).id : (node.data as JobStep).id} className="relative flex items-center shrink-0 group/item">
             {/* 前置插入按钮 - 只在第一个节点前显示，且只在悬停时显示 */}
             {index === 0 && (
               <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 opacity-0 group-hover/item:opacity-100 transition-opacity z-20">
-                {insertStepAt?.driverId === driver.id && insertStepAt?.position === (index === 0 ? 0 : node.stepNumber) ? (
-                  <InsertStepButton
-                    driverId={driver.id}
-                    position={index === 0 ? 0 : node.stepNumber}
-                    isActive={true}
-                    onClick={() => {}}
-                    onClose={() => setInsertStepAt(null)}
-                    onInsert={onInsertStep}
-                    commonLocations={commonLocations}
-                    bins={bins}
-                  />
-                ) : (
-                  <button
-                    onClick={() => setInsertStepAt({ driverId: driver.id, position: index === 0 ? 0 : node.stepNumber })}
-                    className="w-8 h-8 rounded-full border-2 border-dashed border-primary/50 hover:border-primary hover:bg-primary/10 transition-all flex items-center justify-center text-primary bg-card shadow-md"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </button>
-                )}
+                <button
+                  onClick={() => setInsertStepAt({ driverId: driver.id, position: 0 })}
+                  className="w-8 h-8 rounded-full border-2 border-dashed border-primary/50 hover:border-primary hover:bg-primary/10 transition-all flex items-center justify-center text-primary bg-card shadow-md"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
               </div>
             )}
             
@@ -1216,25 +1216,12 @@ function DriverColumn({
             
             {/* 后置插入按钮 - 只在悬停时显示 */}
             <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 opacity-0 group-hover/item:opacity-100 transition-opacity z-20">
-              {insertStepAt?.driverId === driver.id && insertStepAt?.position === node.stepNumber + 1 ? (
-                <InsertStepButton
-                  driverId={driver.id}
-                  position={node.stepNumber + 1}
-                  isActive={true}
-                  onClick={() => {}}
-                  onClose={() => setInsertStepAt(null)}
-                  onInsert={onInsertStep}
-                  commonLocations={commonLocations}
-                  bins={bins}
-                />
-              ) : (
-                <button
-                  onClick={() => setInsertStepAt({ driverId: driver.id, position: node.stepNumber + 1 })}
-                  className="w-8 h-8 rounded-full border-2 border-dashed border-primary/50 hover:border-primary hover:bg-primary/10 transition-all flex items-center justify-center text-primary bg-card shadow-md"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
-              )}
+              <button
+                onClick={() => setInsertStepAt({ driverId: driver.id, position: node.stepNumber + 1 })}
+                className="w-8 h-8 rounded-full border-2 border-dashed border-primary/50 hover:border-primary hover:bg-primary/10 transition-all flex items-center justify-center text-primary bg-card shadow-md"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
             </div>
           </div>
         ))}
