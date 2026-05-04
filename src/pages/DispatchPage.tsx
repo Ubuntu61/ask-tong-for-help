@@ -469,9 +469,12 @@ export function DispatchPage() {
     const activeIdStr = active.id as string;
     const overIdStr = over.id as string;
 
+    console.log('拖拽结束:', { activeIdStr, overIdStr });
+
     // 处理司机行内的拖拽排序
     if (activeIdStr.startsWith('a:') || activeIdStr.startsWith('step:')) {
       if (overIdStr.startsWith('a:') || overIdStr.startsWith('step:')) {
+        console.log('司机行内拖拽');
         // 同一司机行内拖拽
         let activeAssignment: Assignment | undefined;
         let activeStep: JobStep | undefined;
@@ -494,20 +497,38 @@ export function DispatchPage() {
           overStep = (localJobSteps || jobSteps).find(s => s.id === stepId);
         }
         
-        if (!activeAssignment && !activeStep) return;
-        if (!overAssignment && !overStep) return;
+        console.log('找到的项:', { activeAssignment, activeStep, overAssignment, overStep });
+        
+        if (!activeAssignment && !activeStep) {
+          console.log('未找到拖拽项');
+          return;
+        }
+        if (!overAssignment && !overStep) {
+          console.log('未找到目标项');
+          return;
+        }
         
         // 获取司机 ID
         const activeDriverId = activeAssignment?.driver_id || activeStep?.driver_id;
         const overDriverId = overAssignment?.driver_id || overStep?.driver_id;
         
+        console.log('司机ID:', { activeDriverId, overDriverId });
+        
         // 只处理同一司机的拖拽
-        if (activeDriverId !== overDriverId) return;
-        if (!activeDriverId) return;
+        if (activeDriverId !== overDriverId) {
+          console.log('不同司机，跳过');
+          return;
+        }
+        if (!activeDriverId) {
+          console.log('无司机ID');
+          return;
+        }
         
         // 获取该司机的所有 assignments 和 steps
         const driverAssignments = currentAssignments.filter(a => a.driver_id === activeDriverId);
         const driverSteps = (localJobSteps || jobSteps).filter(s => s.driver_id === activeDriverId && s.node_type === 'step');
+        
+        console.log('司机的项:', { driverAssignments: driverAssignments.length, driverSteps: driverSteps.length });
         
         // 合并并排序
         type NodeItem = { type: 'assignment' | 'step'; data: Assignment | JobStep; stepNumber: number };
@@ -524,6 +545,8 @@ export function DispatchPage() {
         });
         
         allItems.sort((a, b) => a.stepNumber - b.stepNumber);
+        
+        console.log('所有项:', allItems.length);
         
         // 找到拖拽的项和目标项的索引
         const oldIndex = allItems.findIndex(item => {
@@ -542,10 +565,17 @@ export function DispatchPage() {
           }
         });
         
-        if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
+        console.log('索引:', { oldIndex, newIndex });
+        
+        if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) {
+          console.log('索引无效或相同');
+          return;
+        }
         
         // 重新排序
         const reordered = arrayMove(allItems, oldIndex, newIndex);
+        
+        console.log('重新排序完成');
         
         // 更新 sequence 和 step_number
         const newAssignments = [...currentAssignments];
@@ -573,11 +603,14 @@ export function DispatchPage() {
           }
         });
         
+        console.log('更新状态');
         setLocalAssignments(newAssignments);
         setLocalJobSteps(newSteps);
         return;
       }
     }
+
+    console.log('使用原有拖拽逻辑');
 
     // 原有的拖拽逻辑（从待排班列拖到司机行）
     const card = cardId.parse(activeIdStr);
