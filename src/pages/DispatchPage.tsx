@@ -1257,9 +1257,9 @@ function DriverColumn({
           isOver ? "bg-primary/5" : "bg-muted/5"
         )}
       >
-        {/* 插入表单 - 固定在容器顶部 */}
+        {/* 插入表单 - 悬浮在容器顶部 */}
         {insertStepAt?.driverId === driver.id && (
-          <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[100]">
+          <div className="absolute top-2 left-4 z-[100]">
             <InsertStepButton
               driverId={driver.id}
               position={insertStepAt.position}
