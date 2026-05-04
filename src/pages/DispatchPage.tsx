@@ -1257,6 +1257,22 @@ function DriverColumn({
           isOver ? "bg-primary/5" : "bg-muted/5"
         )}
       >
+        {/* 插入表单 - 固定在容器顶部 */}
+        {insertStepAt?.driverId === driver.id && (
+          <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[100]">
+            <InsertStepButton
+              driverId={driver.id}
+              position={insertStepAt.position}
+              isActive={true}
+              onClick={() => {}}
+              onClose={() => setInsertStepAt(null)}
+              onInsert={onInsertStep}
+              commonLocations={commonLocations}
+              bins={bins}
+            />
+          </div>
+        )}
+        
         <SortableContext
           items={allNodes.map(node => 
             node.type === 'order' 
@@ -1282,21 +1298,6 @@ function DriverColumn({
                       >
                         <Plus className="h-4 w-4" />
                       </button>
-                      {/* 插入表单 - 贴着按钮显示 */}
-                      {insertStepAt?.driverId === driver.id && insertStepAt?.position === 0 && (
-                        <div className="absolute left-full top-0 ml-2 z-50">
-                          <InsertStepButton
-                            driverId={driver.id}
-                            position={0}
-                            isActive={true}
-                            onClick={() => {}}
-                            onClose={() => setInsertStepAt(null)}
-                            onInsert={onInsertStep}
-                            commonLocations={commonLocations}
-                            bins={bins}
-                          />
-                        </div>
-                      )}
                     </div>
                   )}
                   
@@ -1322,21 +1323,6 @@ function DriverColumn({
                     >
                       <Plus className="h-4 w-4" />
                     </button>
-                    {/* 插入表单 - 贴着按钮显示 */}
-                    {insertStepAt?.driverId === driver.id && insertStepAt?.position === node.stepNumber + 1 && (
-                      <div className="absolute left-full top-0 ml-2 z-50">
-                        <InsertStepButton
-                          driverId={driver.id}
-                          position={node.stepNumber + 1}
-                          isActive={true}
-                          onClick={() => {}}
-                          onClose={() => setInsertStepAt(null)}
-                          onInsert={onInsertStep}
-                          commonLocations={commonLocations}
-                          bins={bins}
-                        />
-                      </div>
-                    )}
                   </div>
                 </div>
               </SortableNode>
