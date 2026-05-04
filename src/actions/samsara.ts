@@ -1,29 +1,31 @@
 import { createServerFn } from "@tanstack/react-start";
-import { SamsaraClient } from "@samsarahq/samsara";
 
 export const fetchSamsaraData = createServerFn({ method: "GET" })
   .handler(async () => {
     const SAMSARA_TOKEN = (process.env.VITE_SAMSARA_TOKEN || import.meta.env.VITE_SAMSARA_TOKEN || 'samsara_api_xuwBoWcChtpqYPlGqEhhpmXncEhIke') as string;
     
-    console.log('🔄 Server Function: 开始通过 SDK 获取 Samsara 数据');
+    console.log('🔄 Server Function: 开始获取 Samsara 数据');
     
     try {
-      const client = new SamsaraClient({ token: SAMSARA_TOKEN });
-      
-      // 使用 SDK 获取车辆数据。如果需要专门获取车辆位置 (locations)，请查阅 SDK 中对应的位置接口 (例如 client.fleet.vehiclesLocations.list())
-      const response = await client.vehicles.list();
-      const vehicles = [];
-      
-      // 遍历异步生成器获取所有车辆
-      for await (const item of response) {
-        vehicles.push(item);
+      const response = await fetch('https://api.samsara.com/fleet/vehicles/locations', {
+        headers: {
+          'Authorization': `Bearer ${SAMSARA_TOKEN}`,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Samsara API 错误:', response.status, errorText);
+        throw new Error(`Samsara API Error: ${response.status} - ${errorText}`);
       }
 
-      console.log('✅ Samsara API 成功，获取到', vehicles.length, '条数据');
+      const data = await response.json();
+      console.log('✅ Samsara API 成功，获取到', data.data?.length || 0, '辆车');
       
       return {
         success: true,
-        data: vehicles,
+        data: data.data || [],
         timestamp: new Date().toISOString()
       };
     } catch (error: any) {
